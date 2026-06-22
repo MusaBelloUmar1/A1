@@ -4,7 +4,9 @@ import android.content.Context
 import android.net.Uri
 import androidx.documentfile.provider.DocumentFile
 import com.musx.a1.data.entity.Book
+import com.musx.a1.data.entity.Chapter
 import com.musx.a1.engine.PdfParser
+import com.musx.a1.engine.ChapterDetector
 import com.musx.a1.repository.AppRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -22,10 +24,12 @@ class FolderScanner(
             val path = file.uri.toString()
             val title = file.name?.removeSuffix(".pdf") ?: "Unknown"
 
+            val totalPages = pdfParser.getPageCount(path)
+
             repository.insertBook(Book(
                 title = title,
                 filePath = path,
-                totalPages = 0,
+                totalPages = totalPages,
                 coverImage = null
             ))
         }

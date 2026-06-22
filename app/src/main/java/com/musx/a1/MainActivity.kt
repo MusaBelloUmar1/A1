@@ -26,6 +26,11 @@ import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.musx.a1.data.AppDatabase
 import com.musx.a1.repository.AppRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
+import android.content.Intent
 import com.musx.a1.ui.screens.bookmarks.BookmarksScreen
 import com.musx.a1.ui.screens.bookmarks.BookmarksViewModel
 import com.musx.a1.ui.screens.library.LibraryScreen
@@ -38,6 +43,8 @@ import com.musx.a1.ui.screens.settings.SettingsViewModel
 import com.musx.a1.ui.theme.MusxA1Theme
 
 class MainActivity : ComponentActivity() {
+    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -124,30 +131,54 @@ fun AppNavigation(
 ) {
     NavHost(navController = navController, startDestination = "welcome", modifier = modifier) {
         composable("welcome") {
-            WelcomeScreen { navController.navigate("library") }
+            WelcomeScreen { navController.navigate("onboarding_folder") }
+        }
+        composable("onboarding_folder") {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val scope = androidx.compose.runtime.rememberCoroutineScope()
+            com.musx.a1.ui.screens.onboarding.FolderAccessScreen { uri ->
+                context.contentResolver.takePersistableUriPermission(
+                    uri,
+                    Intent.FLAG_GRANT_READ_URI_PERMISSION
+                )
+                scope.launch {
+                    repository.insertFolder(com.musx.a1.data.entity.Folder(uri = uri.toString()))
+                    val scanner = com.musx.a1.engine.scanner.FolderScanner(
+                        context,
+                        repository,
+                        com.musx.a1.engine.PdfParser(context)
+                    )
+                    scanner.scanFolder(uri.toString())
+                }
+                navController.navigate("library")
+            }
         }
         composable("library") {
-            val viewModel: LibraryViewModel = viewModel(factory = ViewModelFactory(repository))
+            val viewModel: LibraryViewModel = viewModel(factory = ViewModelFactory(repository, db))
             LibraryScreen(viewModel) { book ->
                 navController.navigate("player/${book.id}")
             }
         }
         composable("player") {
-            val viewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository))
+            val viewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            val context = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(Unit) { viewModel.initializeController(context) }
             PlayerScreen(viewModel)
         }
         composable("player/{bookId}") { backStackEntry ->
             val bookId = backStackEntry.arguments?.getString("bookId")?.toLong() ?: 0L
-            val viewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository))
+            val viewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            val context = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(Unit) { viewModel.initializeController(context) }
             LaunchedEffect(bookId) { viewModel.loadBook(bookId) }
             PlayerScreen(viewModel)
         }
         composable("bookmarks") {
-            val viewModel: BookmarksViewModel = viewModel(factory = ViewModelFactory(repository, db.bookmarkDao()))
+            val viewModel: BookmarksViewModel = viewModel(factory = ViewModelFactory(repository, db))
             BookmarksScreen(viewModel)
         }
         composable("settings") {
-            val viewModel: SettingsViewModel = viewModel(factory = ViewModelFactory(repository))
+            val viewModel: SettingsViewModel = viewModel(factory = ViewModelFactory(repository, db))
             SettingsScreen(viewModel)
         }
     }
@@ -155,13 +186,14 @@ fun AppNavigation(
 
 class ViewModelFactory(
     private val repository: AppRepository,
-    private val bookmarkDao: com.musx.a1.data.dao.BookmarkDao? = null
+    private val db: AppDatabase
 ) : androidx.lifecycle.ViewModelProvider.Factory {
+    @Suppress("UNCHECKED_CAST")
     override fun <T : androidx.lifecycle.ViewModel> create(modelClass: Class<T>): T {
         return when {
             modelClass.isAssignableFrom(LibraryViewModel::class.java) -> LibraryViewModel(repository) as T
             modelClass.isAssignableFrom(PlayerViewModel::class.java) -> PlayerViewModel(repository) as T
-            modelClass.isAssignableFrom(BookmarksViewModel::class.java) -> BookmarksViewModel(bookmarkDao!!) as T
+            modelClass.isAssignableFrom(BookmarksViewModel::class.java) -> BookmarksViewModel(db.bookmarkDao()) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(repository) as T
             else -> throw IllegalArgumentException("Unknown ViewModel class")
         }

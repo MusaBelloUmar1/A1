@@ -1,47 +1,50 @@
 package com.musx.a1.engine
 
-import com.musx.a1.data.entity.Chapter
-import java.io.File
+import android.content.Context
+import android.net.Uri
 import com.tom_roush.pdfbox.pdmodel.PDDocument
 import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.outline.PDOutlineItem
+import com.tom_roush.pdfbox.pdmodel.interactive.documentnavigation.destination.PDPageDestination
 
 object ChapterDetector {
 
     /**
-     * Detects chapters in a PDF file.
-     * Priorities: 1. PDF Bookmarks, 2. Page chunking (fallback).
+     * Detects chapters in a PDF file using the document outline.
      */
-    fun detect(filePath: String): List<ChapterMetadata> {
-        val file = File(filePath)
-        if (!file.exists()) return emptyList()
-
+    fun detect(context: Context, uriString: String): List<ChapterMetadata> {
+        val uri = Uri.parse(uriString)
         return try {
-            PDDocument.load(file).use { document ->
-                val outline = document.documentCatalog.documentOutline
-                if (outline != null) {
+            context.contentResolver.openInputStream(uri)?.use { inputStream ->
+                PDDocument.load(inputStream).use { document ->
+                    val outline = document.documentCatalog.documentOutline
                     val chapters = mutableListOf<ChapterMetadata>()
-                    var current = outline.firstChild
-                    while (current != null) {
-                        val page = document.documentCatalog.pages.indexOf(current.destination?.let {
-                            // Simplified page detection from destination
-                            // In real scenarios, this needs more robust handling
-                            null
-                        } ?: current.findDestinationPage(document))
 
-                        chapters.add(ChapterMetadata(current.title, if (page == -1) 0 else page))
-                        current = current.nextSibling
+                    if (outline != null) {
+                        var current = outline.firstChild
+                        while (current != null) {
+                            val destination = current.destination
+                            val pageIndex: Int = if (destination is PDPageDestination) {
+                                destination.retrievePageNumber()
+                            } else {
+                                val page = current.findDestinationPage(document)
+                                document.documentCatalog.pages.indexOf(page)
+                            }
+
+                            chapters.add(ChapterMetadata(current.title, if (pageIndex < 0) 0 else pageIndex))
+                            current = current.nextSibling
+                        }
                     }
-                    if (chapters.isNotEmpty()) return chapters
-                }
 
-                // Fallback: Page chunking
-                val totalPages = document.numberOfPages
-                val chapters = mutableListOf<ChapterMetadata>()
-                for (i in 0 until totalPages step 10) {
-                    chapters.add(ChapterMetadata("Part ${i / 10 + 1}", i))
+                    if (chapters.isEmpty()) {
+                        // Fallback: Page chunking every 10 pages
+                        val totalPages = document.numberOfPages
+                        for (i in 0 until totalPages step 10) {
+                            chapters.add(ChapterMetadata("Part ${i / 10 + 1}", i))
+                        }
+                    }
+                    chapters
                 }
-                chapters
-            }
+            } ?: emptyList()
         } catch (e: Exception) {
             emptyList()
         }

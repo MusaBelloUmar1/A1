@@ -10,8 +10,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.musx.a1.ui.components.NeumorphicButton
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+
 @Composable
-fun FolderAccessScreen(onFolderSelected: () -> Unit) {
+fun FolderAccessScreen(onFolderSelected: (android.net.Uri) -> Unit) {
+    val launcher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocumentTree()
+    ) { uri ->
+        uri?.let { onFolderSelected(it) }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -32,7 +41,7 @@ fun FolderAccessScreen(onFolderSelected: () -> Unit) {
         Spacer(modifier = Modifier.height(48.dp))
         NeumorphicButton(
             text = "Select Folder",
-            onClick = onFolderSelected
+            onClick = { launcher.launch(null) }
         )
     }
 }
