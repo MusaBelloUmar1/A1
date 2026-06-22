@@ -8,8 +8,8 @@ import com.musx.a1.data.dao.*
 import com.musx.a1.data.entity.*
 
 @Database(
-    entities = [Book::class, Chapter::class, Progress::class, Bookmark::class, Folder::class],
-    version = 1,
+    entities = [Book::class, Chapter::class, Progress::class, Bookmark::class, Folder::class, Playlist::class, PlaylistBookCrossRef::class],
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -18,6 +18,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun progressDao(): ProgressDao
     abstract fun bookmarkDao(): BookmarkDao
     abstract fun folderDao(): FolderDao
+    abstract fun playlistDao(): PlaylistDao
 
     companion object {
         @Volatile
@@ -29,7 +30,9 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "musx_a1_database"
-                ).build()
+                )
+                .fallbackToDestructiveMigration()
+                .build()
                 INSTANCE = instance
                 instance
             }
