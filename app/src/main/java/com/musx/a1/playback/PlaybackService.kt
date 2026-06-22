@@ -53,6 +53,20 @@ class PlaybackService : MediaSessionService() {
             .setCallback(CustomMediaSessionCallback())
             .build()
 
+        player.addListener(object : Player.Listener {
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                if (!playWhenReady) {
+                    ttsManager.stop()
+                    handler.removeCallbacksAndMessages(null)
+                } else {
+                    // If we were paused and now resume, restart current instruction
+                    if (currentInstructions.isNotEmpty()) {
+                        playCurrentInstruction()
+                    }
+                }
+            }
+        })
+
         ttsManager = TtsManager(this) {
             handleSentenceFinished()
         }
@@ -104,6 +118,8 @@ class PlaybackService : MediaSessionService() {
     }
 
     private fun playCurrentInstruction() {
+        if (mediaSession?.player?.playWhenReady == false) return
+
         val instruction = currentInstructions.getOrNull(instructionIndex)
         if (instruction != null) {
             ttsManager.speak(instruction)
