@@ -10,11 +10,14 @@ import com.musx.a1.data.entity.Book
 import com.musx.a1.data.entity.Chapter
 import com.musx.a1.playback.PlaybackService
 import com.musx.a1.repository.AppRepository
+import com.musx.a1.ui.state.AppState
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
 class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
+    private val _appState = MutableStateFlow<AppState>(AppState.Idle)
+    val appState: StateFlow<AppState> = _appState
     private var mediaController: MediaController? = null
 
     fun initializeController(context: Context) {
@@ -38,12 +41,45 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun loadBook(bookId: Long) {
         viewModelScope.launch {
-            _currentBook.value = repository.allBooks.firstOrNull()?.find { it.id == bookId }
-            val args = android.os.Bundle().apply { putLong("bookId", bookId) }
+            _appState.value = AppState.LoadingBook
+            val book = repository.allBooks.first().find { it.id == bookId }
+            _currentBook.value = book
+            _appState.value = AppState.Ready
+
+            if (book != null) {
+                val args = android.os.Bundle().apply { putLong("bookId", bookId) }
+                mediaController?.sendCustomCommand(
+                    androidx.media3.session.SessionCommand("SET_BOOK_ID", android.os.Bundle.EMPTY),
+                    args
+                )
+            }
+        }
+    }
+
+    fun loadExternalUri(uri: String) {
+        viewModelScope.launch {
+            _appState.value = AppState.ParsingPdf
+            // Create a temporary book object for UI
+            _currentBook.value = Book(
+                id = -1L,
+                title = "External PDF",
+                filePath = uri,
+                totalPages = 0,
+                coverImage = null
+            )
+            _appState.value = AppState.Ready
+
+            // Auto-start playback for external URIs
+            val args = android.os.Bundle().apply {
+                putString("filePath", uri)
+                putInt("pageIndex", 0)
+                putInt("sentenceIndex", 0)
+            }
             mediaController?.sendCustomCommand(
-                androidx.media3.session.SessionCommand("SET_BOOK_ID", android.os.Bundle.EMPTY),
+                androidx.media3.session.SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
                 args
             )
+            _isPlaying.value = true
         }
     }
 
@@ -51,6 +87,17 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
         if (_isPlaying.value) {
             mediaController?.pause()
         } else {
+            if (mediaController?.isPlaying == false && currentBook.value != null) {
+                val args = android.os.Bundle().apply {
+                    putString("filePath", currentBook.value?.filePath)
+                    putInt("pageIndex", 0) // Resume logic should go here
+                    putInt("sentenceIndex", 0)
+                }
+                mediaController?.sendCustomCommand(
+                    androidx.media3.session.SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
+                    args
+                )
+            }
             mediaController?.play()
         }
         _isPlaying.value = !_isPlaying.value

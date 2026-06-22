@@ -4,12 +4,15 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.musx.a1.data.entity.Book
 import com.musx.a1.repository.AppRepository
-import kotlinx.coroutines.flow.SharingStarted
-import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.stateIn
+import com.musx.a1.ui.state.AppState
+import kotlinx.coroutines.flow.*
 
 class LibraryViewModel(private val repository: AppRepository) : ViewModel() {
-    val allBooks: StateFlow<List<Book>> = repository.allBooks.stateIn(
+    private val _appState = MutableStateFlow<AppState>(AppState.LoadingLibrary)
+    val appState: StateFlow<AppState> = _appState
+    val allBooks: StateFlow<List<Book>> = repository.allBooks.onEach {
+        _appState.value = AppState.Ready
+    }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5000),
         initialValue = emptyList()
