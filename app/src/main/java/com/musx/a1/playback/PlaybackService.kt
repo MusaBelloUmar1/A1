@@ -38,6 +38,7 @@ class PlaybackService : MediaSessionService() {
     private var currentPageIndex: Int = 0
     private var shuffleEnabled = false
     private var repeatMode = 0 // 0: None, 1: One, 2: All
+    private var playbackSpeed = 1.0f
 
     override fun onCreate() {
         super.onCreate()
@@ -61,8 +62,9 @@ class PlaybackService : MediaSessionService() {
                     ttsManager.stop()
                     handler.removeCallbacksAndMessages(null)
                 } else {
-                    // If we were paused and now resume, restart current instruction
-                    if (currentInstructions.isNotEmpty()) {
+                    if (currentInstructions.isEmpty() && currentFilePath != null) {
+                        loadAndPlayCurrentPage()
+                    } else if (currentInstructions.isNotEmpty()) {
                         playCurrentInstruction()
                     }
                 }
@@ -83,6 +85,9 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand("SKIP_PREVIOUS", Bundle.EMPTY))
                 .add(SessionCommand("TOGGLE_SHUFFLE", Bundle.EMPTY))
                 .add(SessionCommand("SET_REPEAT_MODE", Bundle.EMPTY))
+                .add(SessionCommand("SET_SPEED", Bundle.EMPTY))
+                .add(SessionCommand("SET_SLEEP_TIMER", Bundle.EMPTY))
+                .add(SessionCommand("SEEK_TO_PAGE_PERCENT", Bundle.EMPTY))
                 .build()
             return MediaSession.ConnectionResult.accept(sessionCommands, Player.Commands.EMPTY)
         }
@@ -121,6 +126,23 @@ class PlaybackService : MediaSessionService() {
                     repeatMode = args.getInt("mode", 0)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
+                "SET_SPEED" -> {
+                    playbackSpeed = args.getFloat("speed", 1.0f)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SET_SLEEP_TIMER" -> {
+                    val minutes = args.getInt("minutes", 0)
+                    handler.removeCallbacks(sleepTimerRunnable)
+                    if (minutes > 0) {
+                        handler.postDelayed(sleepTimerRunnable, minutes * 60 * 1000L)
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SEEK_TO_PAGE_PERCENT" -> {
+                    val percent = args.getFloat("position", 0f)
+                    seekToPercent(percent)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
         }
@@ -142,15 +164,38 @@ class PlaybackService : MediaSessionService() {
     private fun playCurrentInstruction() {
         if (mediaSession?.player?.playWhenReady == false) return
 
+        if (currentInstructions.isEmpty()) {
+            loadAndPlayCurrentPage()
+            return
+        }
+
         val instruction = currentInstructions.getOrNull(instructionIndex)
         if (instruction != null) {
-            ttsManager.speak(instruction)
+            val speedInstruction = instruction.copy(speed = instruction.speed * playbackSpeed)
+            ttsManager.speak(speedInstruction)
+            broadcastProgress(speedInstruction.sentence)
             saveProgress()
         } else {
             // Page finished, load next
             currentPageIndex++
             instructionIndex = 0
             loadAndPlayCurrentPage()
+        }
+    }
+
+    private val sleepTimerRunnable = Runnable {
+        mediaSession?.player?.pause()
+    }
+
+    private fun seekToPercent(percent: Float) {
+        val path = currentFilePath ?: return
+        serviceScope.launch(Dispatchers.IO) {
+            val totalPages = pdfParser.getPageCount(path)
+            currentPageIndex = (totalPages * percent).toInt().coerceIn(0, totalPages - 1)
+            instructionIndex = 0
+            withContext(Dispatchers.Main) {
+                loadAndPlayCurrentPage()
+            }
         }
     }
 
@@ -186,6 +231,15 @@ class PlaybackService : MediaSessionService() {
             instructionIndex = 0
             loadAndPlayCurrentPage()
         }
+    }
+
+    private fun broadcastProgress(sentence: String) {
+        val bundle = Bundle().apply {
+            putString("sentence", sentence)
+            putInt("pageIndex", currentPageIndex)
+            putInt("instructionIndex", instructionIndex)
+        }
+        mediaSession?.broadcastCustomCommand(SessionCommand("PROGRESS_UPDATE", Bundle.EMPTY), bundle)
     }
 
     private fun saveProgress() {

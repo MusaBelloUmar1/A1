@@ -9,6 +9,9 @@ interface ProgressDao {
     @Query("SELECT * FROM progress WHERE bookId = :bookId")
     fun getProgressForBook(bookId: Long): Flow<Progress?>
 
+    @Query("SELECT * FROM progress WHERE bookId = :bookId")
+    suspend fun getProgressForBookSync(bookId: Long): Progress?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun saveProgress(progress: Progress)
 

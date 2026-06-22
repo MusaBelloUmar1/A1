@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
         super.onCreate(savedInstanceState)
+        startService(Intent(this, com.musx.a1.playback.PlaybackService::class.java))
         handleIntent(intent)
 
         setContent {
@@ -87,7 +88,7 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
                 val db = AppDatabase.getDatabase(this)
-                val repository = remember { AppRepository(db.bookDao(), db.folderDao(), db.playlistDao()) }
+                val repository = remember { AppRepository(db.bookDao(), db.folderDao(), db.playlistDao(), db.progressDao()) }
 
                 val sheetState = rememberModalBottomSheetState()
                 var showImportSheet by remember { mutableStateOf(false) }
@@ -331,7 +332,7 @@ fun AppNavigation(
             val viewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository, db))
             val state by viewModel.appState.collectAsState()
             val context = androidx.compose.ui.platform.LocalContext.current
-            LaunchedEffect(Unit) { viewModel.initializeController(context) }
+            LaunchedEffect(context) { viewModel.initializeController(context) }
             Box {
                 PlayerScreen(viewModel, onBack = { navController.popBackStack() })
                 FullScreenLoading(state = state)
@@ -342,7 +343,7 @@ fun AppNavigation(
             val viewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository, db))
             val state by viewModel.appState.collectAsState()
             val context = androidx.compose.ui.platform.LocalContext.current
-            LaunchedEffect(Unit) { viewModel.initializeController(context) }
+            LaunchedEffect(context) { viewModel.initializeController(context) }
             LaunchedEffect(bookId) { viewModel.loadBook(bookId) }
             Box {
                 PlayerScreen(viewModel, onBack = { navController.popBackStack() })

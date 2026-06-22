@@ -34,6 +34,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val book by viewModel.currentBook.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val sentence by viewModel.currentSentence.collectAsState()
+    val currentPage by viewModel.currentPage.collectAsState()
     val speed by viewModel.playbackSpeed.collectAsState()
     val shuffleEnabled by viewModel.isShuffleEnabled.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
@@ -64,8 +65,29 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = {}) {
+                    val context = androidx.compose.ui.platform.LocalContext.current
+                    var showMenu by remember { mutableStateOf(false) }
+                    IconButton(onClick = { showMenu = true }) {
                         Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Add to Playlist") },
+                            onClick = {
+                                showMenu = false
+                                Toast.makeText(context, "Feature coming soon", Toast.LENGTH_SHORT).show()
+                            }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Book Details") },
+                            onClick = {
+                                showMenu = false
+                                Toast.makeText(context, "Title: ${book?.title}", Toast.LENGTH_SHORT).show()
+                            }
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
@@ -100,6 +122,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 1 -> NowPlayingContent(
                     book,
                     sentence,
+                    currentPage,
                     isPlaying,
                     speed,
                     shuffleEnabled,
@@ -276,6 +299,7 @@ fun SleepTimerDialog(onDismiss: () -> Unit, onTimerSelected: (Int) -> Unit) {
 fun NowPlayingContent(
     book: com.musx.a1.data.entity.Book?,
     sentence: String,
+    currentPage: Int,
     isPlaying: Boolean,
     speed: Float,
     shuffleEnabled: Boolean,
@@ -315,9 +339,13 @@ fun NowPlayingContent(
                     tint = Color(0xFF7F53AC)
                 )
             }
+            val progress = if (book != null && book.totalPages > 0) {
+                (currentPage.toFloat() / book.totalPages.toFloat()).coerceIn(0f, 1f)
+            } else 0f
+
             // Simple Progress Indicator
             CircularProgressIndicator(
-                progress = { 0.35f },
+                progress = { progress },
                 modifier = Modifier.size(240.dp),
                 color = AccentYellow,
                 strokeWidth = 8.dp
@@ -359,7 +387,11 @@ fun NowPlayingContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         // Time and Slider
-        var sliderValue by remember { mutableFloatStateOf(0.35f) }
+        val bookProgress = if (book != null && book.totalPages > 0) {
+            (currentPage.toFloat() / book.totalPages.toFloat()).coerceIn(0f, 1f)
+        } else 0f
+
+        var sliderValue by remember(bookProgress) { mutableFloatStateOf(bookProgress) }
         Column {
             Slider(
                 value = sliderValue,
@@ -375,8 +407,8 @@ fun NowPlayingContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("12:45", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                Text("45:30", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                Text("Page ${currentPage + 1}", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                Text("${book?.totalPages ?: 0} Pages", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
             }
         }
 
