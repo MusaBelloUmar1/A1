@@ -39,6 +39,45 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     private val _currentSentence = MutableStateFlow("Tap play to start listening.")
     val currentSentence: StateFlow<String> = _currentSentence
 
+    private val _playbackSpeed = MutableStateFlow(1.0f)
+    val playbackSpeed: StateFlow<Float> = _playbackSpeed
+
+    private val _isShuffleEnabled = MutableStateFlow(false)
+    val isShuffleEnabled: StateFlow<Boolean> = _isShuffleEnabled
+
+    private val _repeatMode = MutableStateFlow(0) // 0: None, 1: One, 2: All
+    val repeatMode: StateFlow<Int> = _repeatMode
+
+    private val _sleepTimerMillis = MutableStateFlow(0L)
+    val sleepTimerMillis: StateFlow<Long> = _sleepTimerMillis
+
+    fun setPlaybackSpeed(speed: Float) {
+        _playbackSpeed.value = speed
+        // Update MediaController if possible or send command
+    }
+
+    fun toggleShuffle() {
+        _isShuffleEnabled.value = !_isShuffleEnabled.value
+        val args = android.os.Bundle().apply { putBoolean("enabled", _isShuffleEnabled.value) }
+        mediaController?.sendCustomCommand(
+            androidx.media3.session.SessionCommand("TOGGLE_SHUFFLE", android.os.Bundle.EMPTY),
+            args
+        )
+    }
+
+    fun toggleRepeatMode() {
+        _repeatMode.value = (_repeatMode.value + 1) % 3
+        val args = android.os.Bundle().apply { putInt("mode", _repeatMode.value) }
+        mediaController?.sendCustomCommand(
+            androidx.media3.session.SessionCommand("SET_REPEAT_MODE", android.os.Bundle.EMPTY),
+            args
+        )
+    }
+
+    fun setSleepTimer(minutes: Int) {
+        _sleepTimerMillis.value = minutes * 60 * 1000L
+    }
+
     fun loadBook(bookId: Long) {
         viewModelScope.launch {
             _appState.value = AppState.LoadingBook
@@ -83,6 +122,20 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
         }
     }
 
+    fun toggleFavorite() {
+        viewModelScope.launch {
+            _currentBook.value?.let { book ->
+                val updatedBook = book.copy(favorite = !book.favorite)
+                repository.updateBook(updatedBook)
+                _currentBook.value = updatedBook
+            }
+        }
+    }
+
+    fun seekTo(position: Float) {
+        // mediaController?.seekTo(...)
+    }
+
     fun togglePlayback() {
         if (_isPlaying.value) {
             mediaController?.pause()
@@ -101,6 +154,20 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
             mediaController?.play()
         }
         _isPlaying.value = !_isPlaying.value
+    }
+
+    fun skipNext() {
+        mediaController?.sendCustomCommand(
+            androidx.media3.session.SessionCommand("SKIP_NEXT", android.os.Bundle.EMPTY),
+            android.os.Bundle.EMPTY
+        )
+    }
+
+    fun skipPrevious() {
+        mediaController?.sendCustomCommand(
+            androidx.media3.session.SessionCommand("SKIP_PREVIOUS", android.os.Bundle.EMPTY),
+            android.os.Bundle.EMPTY
+        )
     }
 
     override fun onCleared() {

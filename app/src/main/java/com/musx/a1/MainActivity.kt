@@ -5,6 +5,7 @@ import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Settings
@@ -29,6 +31,10 @@ import com.musx.a1.data.AppDatabase
 import com.musx.a1.repository.AppRepository
 import com.musx.a1.ui.screens.bookmarks.BookmarksScreen
 import com.musx.a1.ui.screens.bookmarks.BookmarksViewModel
+import com.musx.a1.ui.screens.playlists.PlaylistDetailScreen
+import com.musx.a1.ui.screens.playlists.PlaylistsScreen
+import com.musx.a1.ui.screens.playlists.PlaylistsViewModel
+import com.musx.a1.ui.screens.dashboard.DashboardScreen
 import com.musx.a1.ui.screens.library.LibraryScreen
 import com.musx.a1.ui.screens.library.LibraryViewModel
 import com.musx.a1.ui.screens.onboarding.WelcomeScreen
@@ -54,6 +60,7 @@ class MainActivity : ComponentActivity() {
 
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen()
         super.onCreate(savedInstanceState)
         handleIntent(intent)
 
@@ -80,7 +87,7 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
                 val db = AppDatabase.getDatabase(this)
-                val repository = remember { AppRepository(db.bookDao(), db.folderDao()) }
+                val repository = remember { AppRepository(db.bookDao(), db.folderDao(), db.playlistDao()) }
 
                 val sheetState = rememberModalBottomSheetState()
                 var showImportSheet by remember { mutableStateOf(false) }
@@ -140,7 +147,14 @@ class MainActivity : ComponentActivity() {
                     modifier = Modifier.fillMaxSize(),
                     bottomBar = {
                         val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
-                        if (currentRoute != "welcome" && currentRoute != "onboarding_folder") {
+                        val showBottomBar = when {
+                            currentRoute == "welcome" -> false
+                            currentRoute == "onboarding_folder" -> false
+                            currentRoute?.startsWith("player") == true -> false
+                            currentRoute == "settings" -> false
+                            else -> true
+                        }
+                        if (showBottomBar) {
                             BottomNavigationBar(navController)
                         }
                     }
@@ -189,22 +203,22 @@ fun BottomNavigationBar(navController: NavHostController) {
     NavigationBar {
         val currentRoute = navController.currentBackStackEntryAsState().value?.destination?.route
         NavigationBarItem(
-            selected = currentRoute == "library",
-            onClick = { navController.navigate("library") },
-            icon = { Icon(Icons.Default.Home, contentDescription = "Library") },
-            label = { Text("Library") }
+            selected = currentRoute == "dashboard" || currentRoute == "playlists",
+            onClick = { navController.navigate("dashboard") },
+            icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+            label = { Text("Home") }
         )
         NavigationBarItem(
-            selected = currentRoute?.startsWith("player") == true,
-            onClick = { navController.navigate("player") },
-            icon = { Icon(Icons.Default.PlayArrow, contentDescription = "Player") },
-            label = { Text("Player") }
+            selected = currentRoute == "library",
+            onClick = { navController.navigate("library") },
+            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Library") },
+            label = { Text("Library") }
         )
         NavigationBarItem(
             selected = currentRoute == "bookmarks",
             onClick = { navController.navigate("bookmarks") },
-            icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = "Bookmarks") },
-            label = { Text("Bookmarks") }
+            icon = { Icon(Icons.Default.FavoriteBorder, contentDescription = "Favorites") },
+            label = { Text("Favorites") }
         )
         NavigationBarItem(
             selected = currentRoute == "settings",
@@ -224,6 +238,22 @@ fun AppNavigation(
     modifier: Modifier = Modifier
 ) {
     NavHost(navController = navController, startDestination = "welcome", modifier = modifier) {
+        composable("dashboard") {
+            val libraryViewModel: LibraryViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            val playerViewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            val context = androidx.compose.ui.platform.LocalContext.current
+            LaunchedEffect(Unit) { playerViewModel.initializeController(context) }
+            DashboardScreen(
+                libraryViewModel = libraryViewModel,
+                playerViewModel = playerViewModel,
+                onSettingsClick = { navController.navigate("settings") },
+                onLibraryClick = { navController.navigate("library") },
+                onPlayerClick = { navController.navigate("player") },
+                onPlaylistsClick = { navController.navigate("playlists") },
+                onFavoritesClick = { navController.navigate("library/1") },
+                onRecentsClick = { navController.navigate("library/2") }
+            )
+        }
         composable("welcome") {
             WelcomeScreen { navController.navigate("onboarding_folder") }
         }
@@ -246,7 +276,7 @@ fun AppNavigation(
                     scanner.scanFolder(uri.toString())
                     onUpdateAppState(AppState.Ready)
                     withContext(Dispatchers.Main) {
-                        navController.navigate("library")
+                        navController.navigate("dashboard")
                     }
                 }
             }
@@ -255,9 +285,29 @@ fun AppNavigation(
             val viewModel: LibraryViewModel = viewModel(factory = ViewModelFactory(repository, db))
             val state by viewModel.appState.collectAsState()
             Box {
-                LibraryScreen(viewModel) { book ->
-                    navController.navigate("player/${book.id}")
-                }
+                LibraryScreen(
+                    viewModel = viewModel,
+                    onBack = { navController.popBackStack() },
+                    onBookClick = { book ->
+                        navController.navigate("player/${book.id}")
+                    }
+                )
+                FullScreenLoading(state = state)
+            }
+        }
+        composable("library/{tabIndex}") { backStackEntry ->
+            val tabIndex = backStackEntry.arguments?.getString("tabIndex")?.toInt() ?: 0
+            val viewModel: LibraryViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            val state by viewModel.appState.collectAsState()
+            Box {
+                LibraryScreen(
+                    viewModel = viewModel,
+                    initialTab = tabIndex,
+                    onBack = { navController.popBackStack() },
+                    onBookClick = { book ->
+                        navController.navigate("player/${book.id}")
+                    }
+                )
                 FullScreenLoading(state = state)
             }
         }
@@ -303,9 +353,32 @@ fun AppNavigation(
             val viewModel: BookmarksViewModel = viewModel(factory = ViewModelFactory(repository, db))
             BookmarksScreen(viewModel)
         }
+        composable("playlists") {
+            val viewModel: PlaylistsViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            PlaylistsScreen(
+                viewModel = viewModel,
+                onBack = { navController.popBackStack() },
+                onPlaylistClick = { playlist ->
+                    navController.navigate("playlist_detail/${playlist.id}/${playlist.name}")
+                }
+            )
+        }
+        composable("playlist_detail/{playlistId}/{playlistName}") { backStackEntry ->
+            val playlistId = backStackEntry.arguments?.getString("playlistId")?.toLong() ?: 0L
+            val playlistName = backStackEntry.arguments?.getString("playlistName") ?: "Playlist"
+            val books by repository.getBooksInPlaylist(playlistId).collectAsState(initial = emptyList())
+
+            PlaylistDetailScreen(
+                playlistName = playlistName,
+                books = books,
+                onBack = { navController.popBackStack() },
+                onBookClick = { book -> navController.navigate("player/${book.id}") },
+                onPlayAll = { if (books.isNotEmpty()) navController.navigate("player/${books[0].id}") }
+            )
+        }
         composable("settings") {
             val viewModel: SettingsViewModel = viewModel(factory = ViewModelFactory(repository, db))
-            SettingsScreen(viewModel)
+            SettingsScreen(viewModel, onBack = { navController.popBackStack() })
         }
     }
 }
@@ -321,6 +394,7 @@ class ViewModelFactory(
             modelClass.isAssignableFrom(PlayerViewModel::class.java) -> PlayerViewModel(repository) as T
             modelClass.isAssignableFrom(BookmarksViewModel::class.java) -> BookmarksViewModel(db.bookmarkDao()) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(repository) as T
+            modelClass.isAssignableFrom(PlaylistsViewModel::class.java) -> PlaylistsViewModel(repository) as T
             else -> throw IllegalArgumentException("Unknown ViewModel class")
         }
     }

@@ -36,6 +36,8 @@ class PlaybackService : MediaSessionService() {
     private var currentInstructions: List<SpeechInstruction> = emptyList()
     private var instructionIndex: Int = 0
     private var currentPageIndex: Int = 0
+    private var shuffleEnabled = false
+    private var repeatMode = 0 // 0: None, 1: One, 2: All
 
     override fun onCreate() {
         super.onCreate()
@@ -77,6 +79,10 @@ class PlaybackService : MediaSessionService() {
             val sessionCommands = MediaSession.ConnectionResult.DEFAULT_SESSION_COMMANDS.buildUpon()
                 .add(SessionCommand("SET_BOOK_ID", Bundle.EMPTY))
                 .add(SessionCommand("START_BOOK", Bundle.EMPTY))
+                .add(SessionCommand("SKIP_NEXT", Bundle.EMPTY))
+                .add(SessionCommand("SKIP_PREVIOUS", Bundle.EMPTY))
+                .add(SessionCommand("TOGGLE_SHUFFLE", Bundle.EMPTY))
+                .add(SessionCommand("SET_REPEAT_MODE", Bundle.EMPTY))
                 .build()
             return MediaSession.ConnectionResult.accept(sessionCommands, Player.Commands.EMPTY)
         }
@@ -97,6 +103,22 @@ class PlaybackService : MediaSessionService() {
                     currentPageIndex = args.getInt("pageIndex", 0)
                     instructionIndex = args.getInt("sentenceIndex", 0)
                     loadAndPlayCurrentPage()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SKIP_NEXT" -> {
+                    skipNext()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SKIP_PREVIOUS" -> {
+                    skipPrevious()
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "TOGGLE_SHUFFLE" -> {
+                    shuffleEnabled = args.getBoolean("enabled", false)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SET_REPEAT_MODE" -> {
+                    repeatMode = args.getInt("mode", 0)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
             }
@@ -140,6 +162,30 @@ class PlaybackService : MediaSessionService() {
             instructionIndex++
             playCurrentInstruction()
         }, delay)
+    }
+
+    private fun skipNext() {
+        if (instructionIndex + 1 < currentInstructions.size) {
+            instructionIndex++
+            playCurrentInstruction()
+        } else {
+            currentPageIndex++
+            instructionIndex = 0
+            loadAndPlayCurrentPage()
+        }
+    }
+
+    private fun skipPrevious() {
+        if (instructionIndex > 0) {
+            instructionIndex--
+            playCurrentInstruction()
+        } else if (currentPageIndex > 0) {
+            currentPageIndex--
+            // We need to load previous page and go to last instruction
+            // This is a bit complex for a simple implementation, let's just go to start of previous page for now
+            instructionIndex = 0
+            loadAndPlayCurrentPage()
+        }
     }
 
     private fun saveProgress() {

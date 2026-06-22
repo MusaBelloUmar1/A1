@@ -6,9 +6,14 @@ import com.musx.a1.data.entity.Book
 import com.musx.a1.data.entity.Folder
 import kotlinx.coroutines.flow.Flow
 
+import com.musx.a1.data.dao.PlaylistDao
+import com.musx.a1.data.entity.Playlist
+import com.musx.a1.data.entity.PlaylistBookCrossRef
+
 class AppRepository(
     private val bookDao: BookDao,
-    private val folderDao: FolderDao
+    private val folderDao: FolderDao,
+    private val playlistDao: PlaylistDao
 ) {
     val allBooks: Flow<List<Book>> = bookDao.getAllBooks()
     val favoriteBooks: Flow<List<Book>> = bookDao.getFavoriteBooks()
@@ -20,4 +25,11 @@ class AppRepository(
     suspend fun deleteBook(book: Book) = bookDao.deleteBook(book)
 
     suspend fun insertFolder(folder: Folder) = folderDao.insertFolder(folder)
+
+    // Playlists
+    val allPlaylists: Flow<List<Playlist>> = playlistDao.getAllPlaylists()
+    fun getBooksInPlaylist(playlistId: Long) = playlistDao.getBooksInPlaylist(playlistId)
+    suspend fun insertPlaylist(playlist: Playlist) = playlistDao.insertPlaylist(playlist)
+    suspend fun addBookToPlaylist(playlistId: Long, bookId: Long) =
+        playlistDao.addBookToPlaylist(PlaylistBookCrossRef(playlistId, bookId))
 }
