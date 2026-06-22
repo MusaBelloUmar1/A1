@@ -1,4 +1,6 @@
-# Musx A1 - Beginner's Guide to Building and Installing
+# Musx A1
+
+- #Beginner's Guide to Building and Installing
 
 Welcome to Musx A1! This guide will help you turn the code into a working Android app using only your phone and GitHub.
 
