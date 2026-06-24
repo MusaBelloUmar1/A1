@@ -34,6 +34,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val book by viewModel.currentBook.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val sentence by viewModel.currentSentence.collectAsState()
+    val currentPageIndex by viewModel.currentPageIndex.collectAsState()
     val speed by viewModel.playbackSpeed.collectAsState()
     val shuffleEnabled by viewModel.isShuffleEnabled.collectAsState()
     val repeatMode by viewModel.repeatMode.collectAsState()
@@ -100,6 +101,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                 1 -> NowPlayingContent(
                     book,
                     sentence,
+                    currentPageIndex,
                     isPlaying,
                     speed,
                     shuffleEnabled,
@@ -276,6 +278,7 @@ fun SleepTimerDialog(onDismiss: () -> Unit, onTimerSelected: (Int) -> Unit) {
 fun NowPlayingContent(
     book: com.musx.a1.data.entity.Book?,
     sentence: String,
+    currentPageIndex: Int,
     isPlaying: Boolean,
     speed: Float,
     shuffleEnabled: Boolean,
@@ -359,12 +362,13 @@ fun NowPlayingContent(
         Spacer(modifier = Modifier.height(24.dp))
 
         // Time and Slider
-        var sliderValue by remember { mutableFloatStateOf(0.35f) }
+        val totalPages = book?.totalPages ?: 1
+        val progress = if (totalPages > 0) (currentPageIndex.toFloat() / totalPages.toFloat()).coerceIn(0f, 1f) else 0f
+
         Column {
             Slider(
-                value = sliderValue,
-                onValueChange = { sliderValue = it },
-                onValueChangeFinished = { viewModel.seekTo(sliderValue) },
+                value = progress,
+                onValueChange = { viewModel.seekTo(it) },
                 colors = SliderDefaults.colors(
                     thumbColor = AccentYellow,
                     activeTrackColor = AccentYellow,
@@ -375,8 +379,8 @@ fun NowPlayingContent(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                Text("12:45", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
-                Text("45:30", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                Text("Page ${currentPageIndex + 1}", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
+                Text("$totalPages Pages", color = Color.White.copy(alpha = 0.7f), fontSize = 12.sp)
             }
         }
 

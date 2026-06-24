@@ -7,13 +7,15 @@ import com.musx.a1.data.entity.Folder
 import kotlinx.coroutines.flow.Flow
 
 import com.musx.a1.data.dao.PlaylistDao
+import com.musx.a1.data.dao.ProgressDao
 import com.musx.a1.data.entity.Playlist
 import com.musx.a1.data.entity.PlaylistBookCrossRef
 
 class AppRepository(
     private val bookDao: BookDao,
     private val folderDao: FolderDao,
-    private val playlistDao: PlaylistDao
+    private val playlistDao: PlaylistDao,
+    private val progressDao: ProgressDao
 ) {
     val allBooks: Flow<List<Book>> = bookDao.getAllBooks()
     val favoriteBooks: Flow<List<Book>> = bookDao.getFavoriteBooks()
@@ -32,4 +34,9 @@ class AppRepository(
     suspend fun insertPlaylist(playlist: Playlist) = playlistDao.insertPlaylist(playlist)
     suspend fun addBookToPlaylist(playlistId: Long, bookId: Long) =
         playlistDao.addBookToPlaylist(PlaylistBookCrossRef(playlistId, bookId))
+
+    // Progress
+    fun getProgressForBook(bookId: Long) = progressDao.getProgressForBook(bookId)
+    suspend fun saveProgress(bookId: Long, pageIndex: Int, sentenceIndex: Int) =
+        progressDao.saveProgress(com.musx.a1.data.entity.Progress(bookId, pageIndex, sentenceIndex, 0f))
 }
