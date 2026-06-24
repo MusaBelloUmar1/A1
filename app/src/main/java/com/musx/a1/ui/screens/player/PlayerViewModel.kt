@@ -14,6 +14,10 @@ import com.musx.a1.ui.state.AppState
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
+import com.google.common.util.concurrent.ListenableFuture
+import com.google.common.util.concurrent.Futures
 
 class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     private val _appState = MutableStateFlow<AppState>(AppState.Idle)
@@ -22,9 +26,30 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun initializeController(context: Context) {
         val sessionToken = SessionToken(context, ComponentName(context, PlaybackService::class.java))
-        val controllerFuture = MediaController.Builder(context, sessionToken).buildAsync()
+        val controllerFuture = MediaController.Builder(context, sessionToken)
+            .setListener(object : MediaController.Listener {
+                override fun onCustomCommand(
+                    controller: MediaController,
+                    command: SessionCommand,
+                    args: android.os.Bundle
+                ): ListenableFuture<SessionResult> {
+                    if (command.customAction == "PLAYBACK_UPDATE") {
+                        _currentSentence.value = args.getString("sentence", "")
+                        _currentPageIndex.value = args.getInt("pageIndex", 0)
+                        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
+                }
+            })
+            .buildAsync()
         controllerFuture.addListener({
-            mediaController = controllerFuture.get()
+            val controller = controllerFuture.get()
+            mediaController = controller
+            controller.addListener(object : androidx.media3.common.Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    _isPlaying.value = isPlaying
+                }
+            })
         }, MoreExecutors.directExecutor())
     }
     private val _currentBook = MutableStateFlow<Book?>(null)
@@ -38,6 +63,9 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     private val _currentSentence = MutableStateFlow("Tap play to start listening.")
     val currentSentence: StateFlow<String> = _currentSentence
+
+    private val _currentPageIndex = MutableStateFlow(0)
+    val currentPageIndex: StateFlow<Int> = _currentPageIndex
 
     private val _playbackSpeed = MutableStateFlow(1.0f)
     val playbackSpeed: StateFlow<Float> = _playbackSpeed
@@ -53,7 +81,11 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun setPlaybackSpeed(speed: Float) {
         _playbackSpeed.value = speed
-        // Update MediaController if possible or send command
+        val args = android.os.Bundle().apply { putFloat("speed", speed) }
+        mediaController?.sendCustomCommand(
+            SessionCommand("SET_SPEED", android.os.Bundle.EMPTY),
+            args
+        )
     }
 
     fun toggleShuffle() {
@@ -76,6 +108,11 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun setSleepTimer(minutes: Int) {
         _sleepTimerMillis.value = minutes * 60 * 1000L
+        val args = android.os.Bundle().apply { putInt("minutes", minutes) }
+        mediaController?.sendCustomCommand(
+            SessionCommand("SET_SLEEP_TIMER", android.os.Bundle.EMPTY),
+            args
+        )
     }
 
     fun loadBook(bookId: Long) {
@@ -133,7 +170,17 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     }
 
     fun seekTo(position: Float) {
-        // mediaController?.seekTo(...)
+        val book = _currentBook.value ?: return
+        val pageToSeek = (position * book.totalPages).toInt().coerceIn(0, book.totalPages - 1)
+        val args = android.os.Bundle().apply {
+            putString("filePath", book.filePath)
+            putInt("pageIndex", pageToSeek)
+            putInt("sentenceIndex", 0)
+        }
+        mediaController?.sendCustomCommand(
+            SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
+            args
+        )
     }
 
     fun togglePlayback() {
