@@ -470,6 +470,8 @@ fun PlayerUtilButton(icon: ImageVector, label: String, onClick: () -> Unit = {})
 @Composable
 fun ChaptersTab(viewModel: PlayerViewModel) {
     val chapters by viewModel.chapters.collectAsState()
+    val currentPageIndex by viewModel.currentPageIndex.collectAsState()
+
     if (chapters.isEmpty()) {
         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
             Text("No chapters detected", color = Color.White.copy(alpha = 0.7f))
@@ -481,21 +483,25 @@ fun ChaptersTab(viewModel: PlayerViewModel) {
         ) {
             items(chapters.size) { index ->
                 val chapter = chapters[index]
+                val isCurrentChapter = currentPageIndex >= chapter.startPage && currentPageIndex <= chapter.endPage
+
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
+                        .clickable { viewModel.playChapter(chapter) }
                         .padding(vertical = 12.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
                         text = "${index + 1}. ${chapter.title}",
-                        color = Color.White,
+                        color = if (isCurrentChapter) AccentYellow else Color.White,
                         fontSize = 16.sp,
-                        fontWeight = FontWeight.Medium
+                        fontWeight = if (isCurrentChapter) FontWeight.Bold else FontWeight.Medium,
+                        modifier = Modifier.weight(1f)
                     )
                     Text(
-                        text = "02:58", // Placeholder
+                        text = "Page ${chapter.startPage + 1}",
                         color = Color.White.copy(alpha = 0.5f),
                         fontSize = 14.sp
                     )

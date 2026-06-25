@@ -58,6 +58,8 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     private val _chapters = MutableStateFlow<List<Chapter>>(emptyList())
     val chapters: StateFlow<List<Chapter>> = _chapters
 
+    private var chaptersJob: kotlinx.coroutines.Job? = null
+
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
 
@@ -120,14 +122,23 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
             _appState.value = AppState.LoadingBook
             val book = repository.allBooks.first().find { it.id == bookId }
             _currentBook.value = book
-            _appState.value = AppState.Ready
 
             if (book != null) {
+                // Load chapters in a separate coroutine
+                chaptersJob?.cancel()
+                chaptersJob = repository.getChaptersForBook(bookId)
+                    .onEach { _chapters.value = it }
+                    .launchIn(viewModelScope)
+
+                _appState.value = AppState.Ready
+
                 val args = android.os.Bundle().apply { putLong("bookId", bookId) }
                 mediaController?.sendCustomCommand(
                     androidx.media3.session.SessionCommand("SET_BOOK_ID", android.os.Bundle.EMPTY),
                     args
                 )
+            } else {
+                _appState.value = AppState.Ready
             }
         }
     }
@@ -186,21 +197,44 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     fun togglePlayback() {
         if (_isPlaying.value) {
             mediaController?.pause()
+            _isPlaying.value = false
         } else {
             if (mediaController?.isPlaying == false && currentBook.value != null) {
-                val args = android.os.Bundle().apply {
-                    putString("filePath", currentBook.value?.filePath)
-                    putInt("pageIndex", 0) // Resume logic should go here
-                    putInt("sentenceIndex", 0)
+                viewModelScope.launch {
+                    val book = currentBook.value!!
+                    val progress = repository.getProgressForBook(book.id).first()
+                    val args = android.os.Bundle().apply {
+                        putString("filePath", book.filePath)
+                        putInt("pageIndex", progress?.chapterIndex ?: 0)
+                        putInt("sentenceIndex", progress?.sentenceIndex ?: 0)
+                    }
+                    mediaController?.sendCustomCommand(
+                        androidx.media3.session.SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
+                        args
+                    )
+                    mediaController?.play()
+                    _isPlaying.value = true
                 }
-                mediaController?.sendCustomCommand(
-                    androidx.media3.session.SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
-                    args
-                )
+            } else {
+                mediaController?.play()
+                _isPlaying.value = true
             }
-            mediaController?.play()
         }
-        _isPlaying.value = !_isPlaying.value
+    }
+
+    fun playChapter(chapter: Chapter) {
+        val book = _currentBook.value ?: return
+        val args = android.os.Bundle().apply {
+            putString("filePath", book.filePath)
+            putInt("pageIndex", chapter.startPage)
+            putInt("sentenceIndex", 0)
+        }
+        mediaController?.sendCustomCommand(
+            SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
+            args
+        )
+        _isPlaying.value = true
+        mediaController?.play()
     }
 
     fun skipNext() {

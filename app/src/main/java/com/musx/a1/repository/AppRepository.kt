@@ -1,8 +1,10 @@
 package com.musx.a1.repository
 
 import com.musx.a1.data.dao.BookDao
+import com.musx.a1.data.dao.ChapterDao
 import com.musx.a1.data.dao.FolderDao
 import com.musx.a1.data.entity.Book
+import com.musx.a1.data.entity.Chapter
 import com.musx.a1.data.entity.Folder
 import kotlinx.coroutines.flow.Flow
 
@@ -15,7 +17,8 @@ class AppRepository(
     private val bookDao: BookDao,
     private val folderDao: FolderDao,
     private val playlistDao: PlaylistDao,
-    private val progressDao: ProgressDao
+    private val progressDao: ProgressDao,
+    private val chapterDao: ChapterDao
 ) {
     val allBooks: Flow<List<Book>> = bookDao.getAllBooks()
     val favoriteBooks: Flow<List<Book>> = bookDao.getFavoriteBooks()
@@ -39,4 +42,8 @@ class AppRepository(
     fun getProgressForBook(bookId: Long) = progressDao.getProgressForBook(bookId)
     suspend fun saveProgress(bookId: Long, pageIndex: Int, sentenceIndex: Int) =
         progressDao.saveProgress(com.musx.a1.data.entity.Progress(bookId, pageIndex, sentenceIndex, 0f))
+
+    // Chapters
+    fun getChaptersForBook(bookId: Long): Flow<List<Chapter>> = chapterDao.getChaptersForBook(bookId)
+    suspend fun insertChapters(chapters: List<Chapter>) = chapterDao.insertChapters(chapters)
 }
