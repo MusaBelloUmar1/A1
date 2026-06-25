@@ -87,7 +87,15 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
                 val db = AppDatabase.getDatabase(this)
-                val repository = remember { AppRepository(db.bookDao(), db.folderDao(), db.playlistDao(), db.progressDao(), db.chapterDao()) }
+                val repository = remember {
+                    AppRepository(
+                        db.bookDao(),
+                        db.folderDao(),
+                        db.playlistDao(),
+                        db.progressDao(),
+                        db.chapterDao()
+                    )
+                }
 
                 val sheetState = rememberModalBottomSheetState()
                 var showImportSheet by remember { mutableStateOf(false) }

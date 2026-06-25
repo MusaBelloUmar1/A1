@@ -33,20 +33,19 @@ class FolderScanner(
                 coverImage = null
             ))
 
-            // Detect and insert chapters
-            val chaptersMetadata = ChapterDetector.detect(context, path)
-            if (chaptersMetadata.isNotEmpty()) {
-                val chapters = chaptersMetadata.mapIndexed { index, meta ->
-                    val endPage = if (index + 1 < chaptersMetadata.size) {
-                        chaptersMetadata[index + 1].startPage - 1
-                    } else {
-                        totalPages - 1
-                    }
+            // Detect and save chapters
+            val detectedChapters = ChapterDetector.detect(context, path)
+            if (detectedChapters.isNotEmpty()) {
+                val chapters = detectedChapters.mapIndexed { index, meta ->
                     Chapter(
                         bookId = bookId,
                         title = meta.title,
                         startPage = meta.startPage,
-                        endPage = endPage.coerceAtLeast(meta.startPage)
+                        endPage = if (index + 1 < detectedChapters.size) {
+                            detectedChapters[index + 1].startPage
+                        } else {
+                            totalPages
+                        }
                     )
                 }
                 repository.insertChapters(chapters)

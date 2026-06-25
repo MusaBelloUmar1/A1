@@ -22,7 +22,6 @@ import com.musx.a1.data.entity.Progress
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.Futures
 import kotlinx.coroutines.*
-import kotlinx.coroutines.flow.first
 
 class PlaybackService : MediaSessionService() {
     private var mediaSession: MediaSession? = null
@@ -39,7 +38,7 @@ class PlaybackService : MediaSessionService() {
     private var currentPageIndex: Int = 0
     private var shuffleEnabled = false
     private var repeatMode = 0 // 0: None, 1: One, 2: All
-    private var playbackSpeed = 1.0f
+    private var sleepTimerRunnable: Runnable? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -85,7 +84,9 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand("TOGGLE_SHUFFLE", Bundle.EMPTY))
                 .add(SessionCommand("SET_REPEAT_MODE", Bundle.EMPTY))
                 .add(SessionCommand("SET_SPEED", Bundle.EMPTY))
-                .add(SessionCommand("SET_SLEEP_TIMER", Bundle.EMPTY))                .build()
+                .add(SessionCommand("SET_SLEEP_TIMER", Bundle.EMPTY))
+                .add(SessionCommand("SEEK_TO_PAGE_PERCENT", Bundle.EMPTY))
+                .build()
             return MediaSession.ConnectionResult.accept(sessionCommands, Player.Commands.EMPTY)
         }
 
@@ -102,29 +103,9 @@ class PlaybackService : MediaSessionService() {
                 }
                 "START_BOOK" -> {
                     currentFilePath = args.getString("filePath")
-                    val providedPage = args.getInt("pageIndex", -1)
-                    val providedSentence = args.getInt("sentenceIndex", -1)
-
-                    if (providedPage != -1 && providedSentence != -1) {
-                        currentPageIndex = providedPage
-                        instructionIndex = providedSentence
-                        loadAndPlayCurrentPage()
-                    } else {
-                        serviceScope.launch {
-                            if (currentBookId != -1L) {
-                                val db = AppDatabase.getDatabase(this@PlaybackService)
-                                val progress = withContext(Dispatchers.IO) {
-                                    db.progressDao().getProgressForBook(currentBookId).first()
-                                }
-                                currentPageIndex = progress?.chapterIndex ?: 0
-                                instructionIndex = progress?.sentenceIndex ?: 0
-                            } else {
-                                currentPageIndex = 0
-                                instructionIndex = 0
-                            }
-                            loadAndPlayCurrentPage()
-                        }
-                    }
+                    currentPageIndex = args.getInt("pageIndex", 0)
+                    instructionIndex = args.getInt("sentenceIndex", 0)
+                    loadAndPlayCurrentPage()
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 "SKIP_NEXT" -> {
@@ -144,12 +125,33 @@ class PlaybackService : MediaSessionService() {
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 "SET_SPEED" -> {
-                    playbackSpeed = args.getFloat("speed", 1.0f)
+                    val speed = args.getFloat("speed", 1.0f)
+                    ttsManager.setSpeed(speed)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 "SET_SLEEP_TIMER" -> {
                     val minutes = args.getInt("minutes", 0)
-                    startSleepTimer(minutes)
+                    sleepTimerRunnable?.let { handler.removeCallbacks(it) }
+                    if (minutes > 0) {
+                        val runnable = Runnable {
+                            mediaSession?.player?.pause()
+                            sleepTimerRunnable = null
+                        }
+                        sleepTimerRunnable = runnable
+                        handler.postDelayed(runnable, minutes * 60 * 1000L)
+                    } else {
+                        sleepTimerRunnable = null
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SEEK_TO_PAGE_PERCENT" -> {
+                    val percent = args.getFloat("percent", 0f)
+                    serviceScope.launch {
+                        val totalPages = pdfParser.getPageCount(currentFilePath ?: "")
+                        currentPageIndex = (totalPages * percent).toInt().coerceIn(0, totalPages - 1)
+                        instructionIndex = 0
+                        loadAndPlayCurrentPage()
+                    }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
             }
@@ -157,37 +159,14 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
-    private fun startSleepTimer(minutes: Int) {
-        handler.removeCallbacks(sleepTimerRunnable)
-        if (minutes > 0) {
-            handler.postDelayed(sleepTimerRunnable, minutes.toLong() * 60 * 1000L)
-        }
-    }
-
-    private val sleepTimerRunnable = Runnable {
-        mediaSession?.player?.pause()
-    }
-
     private fun loadAndPlayCurrentPage() {
         val path = currentFilePath ?: return
         serviceScope.launch(Dispatchers.IO) {
-            try {
-                val text = pdfParser.extractTextFromPage(path, currentPageIndex)
-                if (text != null && text.isNotBlank()) {
-                    currentInstructions = narrationEngine.process(text)
-                    withContext(Dispatchers.Main) {
-                        playCurrentInstruction()
-                    }
-                } else {
-                    // Empty page or extraction failed, try next page
-                    withContext(Dispatchers.Main) {
-                        skipNext()
-                    }
-                }
-            } catch (e: Exception) {
+            val text = pdfParser.extractTextFromPage(path, currentPageIndex)
+            if (text != null) {
+                currentInstructions = narrationEngine.process(text)
                 withContext(Dispatchers.Main) {
-                    // Log error or notify UI
-                    broadcastError("Failed to extract text from page $currentPageIndex")
+                    playCurrentInstruction()
                 }
             }
         }
@@ -200,7 +179,7 @@ class PlaybackService : MediaSessionService() {
         if (instruction != null) {
             ttsManager.speak(instruction)
             saveProgress()
-            broadcastUpdate()
+            broadcastState()
         } else {
             // Page finished, load next
             currentPageIndex++
@@ -246,31 +225,8 @@ class PlaybackService : MediaSessionService() {
             playCurrentInstruction()
         } else if (currentPageIndex > 0) {
             currentPageIndex--
-            loadAndPlayPreviousPage()
-        }
-    }
-
-    private fun loadAndPlayPreviousPage() {
-        val path = currentFilePath ?: return
-        serviceScope.launch(Dispatchers.IO) {
-            try {
-                val text = pdfParser.extractTextFromPage(path, currentPageIndex)
-                if (text != null && text.isNotBlank()) {
-                    currentInstructions = narrationEngine.process(text)
-                    instructionIndex = (currentInstructions.size - 1).coerceAtLeast(0)
-                    withContext(Dispatchers.Main) {
-                        playCurrentInstruction()
-                    }
-                } else {
-                    withContext(Dispatchers.Main) {
-                        skipPrevious()
-                    }
-                }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    broadcastError("Failed to extract text from page $currentPageIndex")
-                }
-            }
+            instructionIndex = 0
+            loadAndPlayCurrentPage()
         }
     }
 
@@ -283,29 +239,6 @@ class PlaybackService : MediaSessionService() {
                 Progress(currentBookId, currentPageIndex, instructionIndex, 0f)
             )
         }
-    }
-
-    private fun broadcastError(message: String) {
-        val args = Bundle().apply {
-            putString("error", message)
-        }
-        mediaSession?.broadcastCustomCommand(
-            SessionCommand("PLAYBACK_ERROR", Bundle.EMPTY),
-            args
-        )
-    }
-
-    private fun broadcastUpdate() {
-        val instruction = currentInstructions.getOrNull(instructionIndex)
-        val args = Bundle().apply {
-            putString("sentence", instruction?.sentence ?: "")
-            putInt("pageIndex", currentPageIndex)
-            putInt("sentenceIndex", instructionIndex)
-        }
-        mediaSession?.broadcastCustomCommand(
-            SessionCommand("PLAYBACK_UPDATE", Bundle.EMPTY),
-            args
-        )
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? = mediaSession
