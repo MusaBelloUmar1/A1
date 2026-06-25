@@ -4,7 +4,10 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import android.content.ComponentName
 import android.content.Context
+import androidx.media3.common.Player
 import androidx.media3.session.MediaController
+import androidx.media3.session.SessionCommand
+import androidx.media3.session.SessionResult
 import androidx.media3.session.SessionToken
 import com.musx.a1.data.entity.Book
 import com.musx.a1.data.entity.Chapter
@@ -94,7 +97,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
         _isShuffleEnabled.value = !_isShuffleEnabled.value
         val args = android.os.Bundle().apply { putBoolean("enabled", _isShuffleEnabled.value) }
         mediaController?.sendCustomCommand(
-            androidx.media3.session.SessionCommand("TOGGLE_SHUFFLE", android.os.Bundle.EMPTY),
+            SessionCommand("TOGGLE_SHUFFLE", android.os.Bundle.EMPTY),
             args
         )
     }
@@ -103,7 +106,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
         _repeatMode.value = (_repeatMode.value + 1) % 3
         val args = android.os.Bundle().apply { putInt("mode", _repeatMode.value) }
         mediaController?.sendCustomCommand(
-            androidx.media3.session.SessionCommand("SET_REPEAT_MODE", android.os.Bundle.EMPTY),
+            SessionCommand("SET_REPEAT_MODE", android.os.Bundle.EMPTY),
             args
         )
     }
@@ -120,7 +123,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     fun loadBook(bookId: Long) {
         viewModelScope.launch {
             _appState.value = AppState.LoadingBook
-            val book = repository.allBooks.first().find { it.id == bookId }
+            val book = repository.getBookById(bookId)
             _currentBook.value = book
 
             if (book != null) {
@@ -134,7 +137,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
                 val args = android.os.Bundle().apply { putLong("bookId", bookId) }
                 mediaController?.sendCustomCommand(
-                    androidx.media3.session.SessionCommand("SET_BOOK_ID", android.os.Bundle.EMPTY),
+                    SessionCommand("SET_BOOK_ID", android.os.Bundle.EMPTY),
                     args
                 )
             } else {
@@ -163,7 +166,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
                 putInt("sentenceIndex", 0)
             }
             mediaController?.sendCustomCommand(
-                androidx.media3.session.SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
+                SessionCommand("START_BOOK", android.os.Bundle.EMPTY),
                 args
             )
             _isPlaying.value = true
@@ -239,14 +242,14 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun skipNext() {
         mediaController?.sendCustomCommand(
-            androidx.media3.session.SessionCommand("SKIP_NEXT", android.os.Bundle.EMPTY),
+            SessionCommand("SKIP_NEXT", android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY
         )
     }
 
     fun skipPrevious() {
         mediaController?.sendCustomCommand(
-            androidx.media3.session.SessionCommand("SKIP_PREVIOUS", android.os.Bundle.EMPTY),
+            SessionCommand("SKIP_PREVIOUS", android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY
         )
     }

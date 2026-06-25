@@ -61,9 +61,8 @@ class PlaybackService : MediaSessionService() {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (!playWhenReady) {
                     ttsManager.stop()
-                    handler.removeCallbacksAndMessages(null)
+                    // Don't remove all callbacks, only the sleep timer if needed or specific ones
                 } else {
-                    // If we were paused and now resume, restart current instruction
                     if (currentInstructions.isNotEmpty()) {
                         playCurrentInstruction()
                     }
@@ -86,8 +85,7 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand("TOGGLE_SHUFFLE", Bundle.EMPTY))
                 .add(SessionCommand("SET_REPEAT_MODE", Bundle.EMPTY))
                 .add(SessionCommand("SET_SPEED", Bundle.EMPTY))
-                .add(SessionCommand("SET_SLEEP_TIMER", Bundle.EMPTY))
-                .build()
+                .add(SessionCommand("SET_SLEEP_TIMER", Bundle.EMPTY))                .build()
             return MediaSession.ConnectionResult.accept(sessionCommands, Player.Commands.EMPTY)
         }
 
@@ -221,6 +219,16 @@ class PlaybackService : MediaSessionService() {
         }, delay)
     }
 
+    private fun broadcastState() {
+        val instruction = currentInstructions.getOrNull(instructionIndex) ?: return
+        val bundle = Bundle().apply {
+            putString("sentence", instruction.sentence)
+            putInt("pageIndex", currentPageIndex)
+            putInt("instructionIndex", instructionIndex)
+        }
+        mediaSession?.setSessionExtras(bundle)
+    }
+
     private fun skipNext() {
         if (instructionIndex + 1 < currentInstructions.size) {
             instructionIndex++
@@ -310,6 +318,7 @@ class PlaybackService : MediaSessionService() {
         }
         ttsManager.release()
         serviceScope.cancel()
+        sleepTimerRunnable?.let { handler.removeCallbacks(it) }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }
