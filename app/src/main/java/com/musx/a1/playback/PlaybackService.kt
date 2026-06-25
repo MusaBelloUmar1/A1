@@ -38,6 +38,7 @@ class PlaybackService : MediaSessionService() {
     private var currentPageIndex: Int = 0
     private var shuffleEnabled = false
     private var repeatMode = 0 // 0: None, 1: One, 2: All
+    private var sleepTimerRunnable: Runnable? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -59,9 +60,8 @@ class PlaybackService : MediaSessionService() {
             override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
                 if (!playWhenReady) {
                     ttsManager.stop()
-                    handler.removeCallbacksAndMessages(null)
+                    // Don't remove all callbacks, only the sleep timer if needed or specific ones
                 } else {
-                    // If we were paused and now resume, restart current instruction
                     if (currentInstructions.isNotEmpty()) {
                         playCurrentInstruction()
                     }
@@ -83,6 +83,9 @@ class PlaybackService : MediaSessionService() {
                 .add(SessionCommand("SKIP_PREVIOUS", Bundle.EMPTY))
                 .add(SessionCommand("TOGGLE_SHUFFLE", Bundle.EMPTY))
                 .add(SessionCommand("SET_REPEAT_MODE", Bundle.EMPTY))
+                .add(SessionCommand("SET_SPEED", Bundle.EMPTY))
+                .add(SessionCommand("SET_SLEEP_TIMER", Bundle.EMPTY))
+                .add(SessionCommand("SEEK_TO_PAGE_PERCENT", Bundle.EMPTY))
                 .build()
             return MediaSession.ConnectionResult.accept(sessionCommands, Player.Commands.EMPTY)
         }
@@ -121,6 +124,36 @@ class PlaybackService : MediaSessionService() {
                     repeatMode = args.getInt("mode", 0)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
+                "SET_SPEED" -> {
+                    val speed = args.getFloat("speed", 1.0f)
+                    ttsManager.setSpeed(speed)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SET_SLEEP_TIMER" -> {
+                    val minutes = args.getInt("minutes", 0)
+                    sleepTimerRunnable?.let { handler.removeCallbacks(it) }
+                    if (minutes > 0) {
+                        val runnable = Runnable {
+                            mediaSession?.player?.pause()
+                            sleepTimerRunnable = null
+                        }
+                        sleepTimerRunnable = runnable
+                        handler.postDelayed(runnable, minutes * 60 * 1000L)
+                    } else {
+                        sleepTimerRunnable = null
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                "SEEK_TO_PAGE_PERCENT" -> {
+                    val percent = args.getFloat("percent", 0f)
+                    serviceScope.launch {
+                        val totalPages = pdfParser.getPageCount(currentFilePath ?: "")
+                        currentPageIndex = (totalPages * percent).toInt().coerceIn(0, totalPages - 1)
+                        instructionIndex = 0
+                        loadAndPlayCurrentPage()
+                    }
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
             }
             return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
         }
@@ -146,6 +179,7 @@ class PlaybackService : MediaSessionService() {
         if (instruction != null) {
             ttsManager.speak(instruction)
             saveProgress()
+            broadcastState()
         } else {
             // Page finished, load next
             currentPageIndex++
@@ -162,6 +196,16 @@ class PlaybackService : MediaSessionService() {
             instructionIndex++
             playCurrentInstruction()
         }, delay)
+    }
+
+    private fun broadcastState() {
+        val instruction = currentInstructions.getOrNull(instructionIndex) ?: return
+        val bundle = Bundle().apply {
+            putString("sentence", instruction.sentence)
+            putInt("pageIndex", currentPageIndex)
+            putInt("instructionIndex", instructionIndex)
+        }
+        mediaSession?.setSessionExtras(bundle)
     }
 
     private fun skipNext() {
@@ -181,8 +225,6 @@ class PlaybackService : MediaSessionService() {
             playCurrentInstruction()
         } else if (currentPageIndex > 0) {
             currentPageIndex--
-            // We need to load previous page and go to last instruction
-            // This is a bit complex for a simple implementation, let's just go to start of previous page for now
             instructionIndex = 0
             loadAndPlayCurrentPage()
         }
@@ -209,6 +251,7 @@ class PlaybackService : MediaSessionService() {
         }
         ttsManager.release()
         serviceScope.cancel()
+        sleepTimerRunnable?.let { handler.removeCallbacks(it) }
         handler.removeCallbacksAndMessages(null)
         super.onDestroy()
     }

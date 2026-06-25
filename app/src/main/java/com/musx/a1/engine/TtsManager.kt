@@ -12,6 +12,7 @@ class TtsManager(context: Context, private val onSentenceFinished: () -> Unit) {
     private var tts: TextToSpeech? = null
     private var isInitialized = false
     private val handler = Handler(Looper.getMainLooper())
+    private var globalSpeed = 1.0f
 
     init {
         tts = TextToSpeech(context) { status ->
@@ -34,6 +35,10 @@ class TtsManager(context: Context, private val onSentenceFinished: () -> Unit) {
 
     private var pendingInstruction: SpeechInstruction? = null
 
+    fun setSpeed(speed: Float) {
+        globalSpeed = speed
+    }
+
     /**
      * Speaks a instruction with specific timing and voice parameters.
      */
@@ -44,7 +49,7 @@ class TtsManager(context: Context, private val onSentenceFinished: () -> Unit) {
         }
 
         handler.postDelayed({
-            tts?.setSpeechRate(instruction.speed)
+            tts?.setSpeechRate(instruction.speed * globalSpeed)
             tts?.setPitch(instruction.pitch)
 
             // Adding a small delay for pauseAfterMs via UtteranceProgressListener

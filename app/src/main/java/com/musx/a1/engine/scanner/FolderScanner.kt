@@ -26,12 +26,30 @@ class FolderScanner(
 
             val totalPages = pdfParser.getPageCount(path)
 
-            repository.insertBook(Book(
+            val bookId = repository.insertBook(Book(
                 title = title,
                 filePath = path,
                 totalPages = totalPages,
                 coverImage = null
             ))
+
+            // Detect and save chapters
+            val detectedChapters = ChapterDetector.detect(context, path)
+            if (detectedChapters.isNotEmpty()) {
+                val chapters = detectedChapters.mapIndexed { index, meta ->
+                    Chapter(
+                        bookId = bookId,
+                        title = meta.title,
+                        startPage = meta.startPage,
+                        endPage = if (index + 1 < detectedChapters.size) {
+                            detectedChapters[index + 1].startPage
+                        } else {
+                            totalPages
+                        }
+                    )
+                }
+                repository.insertChapters(chapters)
+            }
         }
     }
 }
