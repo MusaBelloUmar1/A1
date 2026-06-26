@@ -17,8 +17,6 @@ import com.musx.a1.ui.state.AppState
 import com.google.common.util.concurrent.MoreExecutors
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import androidx.media3.session.SessionCommand
-import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.ListenableFuture
 import com.google.common.util.concurrent.Futures
 
@@ -39,6 +37,8 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
                     if (command.customAction == "PLAYBACK_UPDATE") {
                         _currentSentence.value = args.getString("sentence", "")
                         _currentPageIndex.value = args.getInt("pageIndex", 0)
+                        _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
+                        _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
                         return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
@@ -68,6 +68,12 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     private val _currentSentence = MutableStateFlow("Tap play to start listening.")
     val currentSentence: StateFlow<String> = _currentSentence
+
+    private val _currentSentenceIndex = MutableStateFlow(0)
+    val currentSentenceIndex: StateFlow<Int> = _currentSentenceIndex
+
+    private val _pageSentences = MutableStateFlow<List<String>>(emptyList())
+    val pageSentences: StateFlow<List<String>> = _pageSentences
 
     private val _currentPageIndex = MutableStateFlow(0)
     val currentPageIndex: StateFlow<Int> = _currentPageIndex
