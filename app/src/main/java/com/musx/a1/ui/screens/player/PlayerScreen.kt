@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -111,7 +112,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     onSleepClick = { showSleepDialog = true },
                     viewModel = viewModel
                 )
-                2 -> TranscriptTab(sentence)
+                2 -> TranscriptTab(viewModel)
             }
         }
     }
@@ -319,8 +320,11 @@ fun NowPlayingContent(
                 )
             }
             // Simple Progress Indicator
+            val progress = if ((book?.totalPages ?: 1) > 0) {
+                (currentPageIndex.toFloat() / (book?.totalPages?.toFloat() ?: 1f)).coerceIn(0f, 1f)
+            } else 0f
             CircularProgressIndicator(
-                progress = { 0.35f },
+                progress = { progress },
                 modifier = Modifier.size(240.dp),
                 color = AccentYellow,
                 strokeWidth = 8.dp
@@ -513,14 +517,34 @@ fun ChaptersTab(viewModel: PlayerViewModel) {
 }
 
 @Composable
-fun TranscriptTab(sentence: String) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Text(
-            text = sentence,
-            color = Color.White,
-            style = MaterialTheme.typography.headlineSmall,
-            textAlign = TextAlign.Center,
-            modifier = Modifier.padding(16.dp)
-        )
+fun TranscriptTab(viewModel: PlayerViewModel) {
+    val sentences by viewModel.pageSentences.collectAsState()
+    val currentIndex by viewModel.currentSentenceIndex.collectAsState()
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(currentIndex) {
+        if (sentences.isNotEmpty()) {
+            listState.animateScrollToItem(currentIndex)
+        }
+    }
+
+    LazyColumn(
+        state = listState,
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(vertical = 16.dp)
+    ) {
+        items(sentences.size) { index ->
+            val isCurrent = index == currentIndex
+            Text(
+                text = sentences[index],
+                color = if (isCurrent) AccentYellow else Color.White.copy(alpha = 0.7f),
+                style = if (isCurrent) MaterialTheme.typography.headlineSmall else MaterialTheme.typography.bodyLarge,
+                fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                textAlign = TextAlign.Center,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp, horizontal = 16.dp)
+            )
+        }
     }
 }

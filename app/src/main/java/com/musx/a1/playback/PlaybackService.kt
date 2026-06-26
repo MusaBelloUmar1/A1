@@ -145,6 +145,7 @@ class PlaybackService : MediaSessionService() {
                 }
                 "SET_SPEED" -> {
                     playbackSpeed = args.getFloat("speed", 1.0f)
+                    ttsManager.setSpeed(playbackSpeed)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 "SET_SLEEP_TIMER" -> {
@@ -202,10 +203,30 @@ class PlaybackService : MediaSessionService() {
             saveProgress()
             broadcastUpdate()
         } else {
-            // Page finished, load next
-            currentPageIndex++
-            instructionIndex = 0
-            loadAndPlayCurrentPage()
+            // Page finished, check if book finished
+            val totalPages = serviceScope.async(Dispatchers.IO) {
+                currentFilePath?.let { pdfParser.getPageCount(it) } ?: 0
+            }
+            serviceScope.launch {
+                val pages = totalPages.await()
+                if (currentPageIndex + 1 < pages) {
+                    currentPageIndex++
+                    instructionIndex = 0
+                    loadAndPlayCurrentPage()
+                } else {
+                    // Book finished
+                    if (repeatMode == 2) { // Repeat All
+                        currentPageIndex = 0
+                        instructionIndex = 0
+                        loadAndPlayCurrentPage()
+                    } else {
+                        mediaSession?.player?.pause()
+                        currentPageIndex = 0
+                        instructionIndex = 0
+                        // Optionally broadcast book finished
+                    }
+                }
+            }
         }
     }
 
@@ -214,8 +235,12 @@ class PlaybackService : MediaSessionService() {
         val delay = currentInstruction?.pauseAfterMs ?: 0L
 
         handler.postDelayed({
-            instructionIndex++
-            playCurrentInstruction()
+            if (repeatMode == 1) { // Repeat One (Sentence)
+                playCurrentInstruction()
+            } else {
+                instructionIndex++
+                playCurrentInstruction()
+            }
         }, delay)
     }
 
@@ -301,6 +326,8 @@ class PlaybackService : MediaSessionService() {
             putString("sentence", instruction?.sentence ?: "")
             putInt("pageIndex", currentPageIndex)
             putInt("sentenceIndex", instructionIndex)
+            putInt("totalSentences", currentInstructions.size)
+            putStringArrayList("pageSentences", ArrayList(currentInstructions.map { it.sentence }))
         }
         mediaSession?.broadcastCustomCommand(
             SessionCommand("PLAYBACK_UPDATE", Bundle.EMPTY),
