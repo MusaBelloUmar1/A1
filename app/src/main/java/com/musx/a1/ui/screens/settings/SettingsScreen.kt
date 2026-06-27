@@ -37,7 +37,7 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
                 uri,
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
-            viewModel.addFolder(uri.toString())
+            viewModel.addFolder(context, uri.toString())
         }
     }
 

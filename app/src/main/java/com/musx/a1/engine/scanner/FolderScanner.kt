@@ -22,8 +22,11 @@ class FolderScanner(
 
         files.filter { it.name?.endsWith(".pdf", ignoreCase = true) == true }.forEach { file ->
             val path = file.uri.toString()
-            val title = file.name?.removeSuffix(".pdf") ?: "Unknown"
 
+            // Skip if book already exists
+            if (repository.getBookByPath(path) != null) return@forEach
+
+            val title = file.name?.removeSuffix(".pdf") ?: "Unknown"
             val totalPages = pdfParser.getPageCount(path)
 
             val bookId = repository.insertBook(Book(
