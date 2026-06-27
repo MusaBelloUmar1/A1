@@ -36,7 +36,23 @@ object ChapterDetector {
                     }
 
                     if (chapters.isEmpty()) {
-                        // Fallback: Page chunking every 10 pages
+                        // Fallback 1: Pattern matching in first few pages
+                        val totalPages = document.numberOfPages
+                        val stripper = com.tom_roush.pdfbox.text.PDFTextStripper()
+                        val chapterRegex = Regex("(?i)^(chapter|section|part)\\s+(\\d+|[ivxldcm]+)", RegexOption.MULTILINE)
+
+                        for (i in 0 until minOf(totalPages, 50)) {
+                            stripper.startPage = i + 1
+                            stripper.endPage = i + 1
+                            val pageText = stripper.getText(document)
+                            chapterRegex.find(pageText)?.let { match ->
+                                chapters.add(ChapterMetadata(match.value.trim(), i))
+                            }
+                        }
+                    }
+
+                    if (chapters.isEmpty()) {
+                        // Fallback 2: Page chunking every 10 pages
                         val totalPages = document.numberOfPages
                         for (i in 0 until totalPages step 10) {
                             chapters.add(ChapterMetadata("Part ${i / 10 + 1}", i))

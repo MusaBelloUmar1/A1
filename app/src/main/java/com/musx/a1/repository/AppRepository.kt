@@ -26,6 +26,7 @@ class AppRepository(
     val folders: Flow<List<Folder>> = folderDao.getAllFolders()
 
     suspend fun getBookById(id: Long) = bookDao.getBookById(id)
+    suspend fun getBookByPath(path: String) = bookDao.getBookByPath(path)
     suspend fun insertBook(book: Book) = bookDao.insertBook(book)
     suspend fun updateBook(book: Book) = bookDao.updateBook(book)
     suspend fun deleteBook(book: Book) = bookDao.deleteBook(book)

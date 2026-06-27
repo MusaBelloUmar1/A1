@@ -15,9 +15,15 @@ class SettingsViewModel(private val repository: AppRepository) : ViewModel() {
     private val _autoPlayNext = MutableStateFlow(true)
     val autoPlayNext: StateFlow<Boolean> = _autoPlayNext
 
-    fun addFolder(uri: String) {
+    fun addFolder(context: android.content.Context, uri: String) {
         viewModelScope.launch {
             repository.insertFolder(Folder(uri = uri))
+            val scanner = com.musx.a1.engine.scanner.FolderScanner(
+                context,
+                repository,
+                com.musx.a1.engine.PdfParser(context)
+            )
+            scanner.scanFolder(uri)
         }
     }
 
