@@ -87,7 +87,7 @@ class MainActivity : ComponentActivity() {
 
                 val navController = rememberNavController()
                 val db = AppDatabase.getDatabase(this)
-                val repository = remember { AppRepository(db.bookDao(), db.folderDao(), db.playlistDao(), db.progressDao(), db.chapterDao()) }
+                val repository = remember { AppRepository(db.bookDao(), db.folderDao(), db.playlistDao(), db.progressDao(), db.chapterDao(), db.bookmarkDao()) }
 
                 val sheetState = rememberModalBottomSheetState()
                 var showImportSheet by remember { mutableStateOf(false) }
@@ -241,11 +241,13 @@ fun AppNavigation(
         composable("dashboard") {
             val libraryViewModel: LibraryViewModel = viewModel(factory = ViewModelFactory(repository, db))
             val playerViewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            val playlistsViewModel: PlaylistsViewModel = viewModel(factory = ViewModelFactory(repository, db))
             val context = androidx.compose.ui.platform.LocalContext.current
             LaunchedEffect(Unit) { playerViewModel.initializeController(context) }
             DashboardScreen(
                 libraryViewModel = libraryViewModel,
                 playerViewModel = playerViewModel,
+                playlistsViewModel = playlistsViewModel,
                 onSettingsClick = { navController.navigate("settings") },
                 onLibraryClick = { navController.navigate("library") },
                 onPlayerClick = { navController.navigate("player") },
@@ -288,6 +290,7 @@ fun AppNavigation(
                 LibraryScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
+                    onSettingsClick = { navController.navigate("settings") },
                     onBookClick = { book ->
                         navController.navigate("player/${book.id}")
                     }
@@ -304,6 +307,7 @@ fun AppNavigation(
                     viewModel = viewModel,
                     initialTab = tabIndex,
                     onBack = { navController.popBackStack() },
+                    onSettingsClick = { navController.navigate("settings") },
                     onBookClick = { book ->
                         navController.navigate("player/${book.id}")
                     }
@@ -392,7 +396,7 @@ class ViewModelFactory(
         return when {
             modelClass.isAssignableFrom(LibraryViewModel::class.java) -> LibraryViewModel(repository) as T
             modelClass.isAssignableFrom(PlayerViewModel::class.java) -> PlayerViewModel(repository) as T
-            modelClass.isAssignableFrom(BookmarksViewModel::class.java) -> BookmarksViewModel(db.bookmarkDao()) as T
+            modelClass.isAssignableFrom(BookmarksViewModel::class.java) -> BookmarksViewModel(repository) as T
             modelClass.isAssignableFrom(SettingsViewModel::class.java) -> SettingsViewModel(repository) as T
             modelClass.isAssignableFrom(PlaylistsViewModel::class.java) -> PlaylistsViewModel(repository) as T
             else -> throw IllegalArgumentException("Unknown ViewModel class")

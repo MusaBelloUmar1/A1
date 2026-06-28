@@ -31,6 +31,7 @@ fun LibraryScreen(
     viewModel: LibraryViewModel,
     initialTab: Int = 0,
     onBack: () -> Unit,
+    onSettingsClick: () -> Unit = {},
     onBookClick: (Book) -> Unit
 ) {
     val allBooks by viewModel.allBooks.collectAsState()
@@ -102,7 +103,7 @@ fun LibraryScreen(
                     title = "No books found",
                     description = "Scan a folder to add your PDF books to the library.",
                     actionText = "Go to Settings",
-                    onAction = {}
+                    onAction = onSettingsClick
                 )
             }
         } else {

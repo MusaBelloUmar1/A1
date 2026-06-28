@@ -76,8 +76,8 @@ fun PlaylistsScreen(
     if (showCreateDialog) {
         CreatePlaylistDialog(
             onDismiss = { showCreateDialog = false },
-            onCreate = { name ->
-                viewModel.createPlaylist(name)
+            onCreate = { name, description ->
+                viewModel.createPlaylist(name, description)
                 showCreateDialog = false
             }
         )
@@ -114,26 +114,40 @@ fun PlaylistListItem(playlist: Playlist, onClick: () -> Unit) {
 }
 
 @Composable
-fun CreatePlaylistDialog(onDismiss: () -> Unit, onCreate: (String) -> Unit) {
+fun CreatePlaylistDialog(onDismiss: () -> Unit, onCreate: (String, String) -> Unit) {
     var name by remember { mutableStateOf("") }
+    var description by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("New Playlist", color = PrimaryBlue) },
         text = {
-            TextField(
-                value = name,
-                onValueChange = { name = it },
-                placeholder = { Text("Playlist Name") },
-                singleLine = true,
-                colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
-                    unfocusedContainerColor = Color.Transparent,
-                    focusedIndicatorColor = PrimaryBlue
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                TextField(
+                    value = name,
+                    onValueChange = { name = it },
+                    placeholder = { Text("Playlist Name") },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = PrimaryBlue
+                    )
                 )
-            )
+                TextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    placeholder = { Text("Description (Optional)") },
+                    singleLine = true,
+                    colors = TextFieldDefaults.colors(
+                        focusedContainerColor = Color.Transparent,
+                        unfocusedContainerColor = Color.Transparent,
+                        focusedIndicatorColor = PrimaryBlue
+                    )
+                )
+            }
         },
         confirmButton = {
-            TextButton(onClick = { if (name.isNotBlank()) onCreate(name) }) {
+            TextButton(onClick = { if (name.isNotBlank()) onCreate(name, description) }) {
                 Text("Create", color = PrimaryBlue)
             }
         },

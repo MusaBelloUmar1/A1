@@ -34,12 +34,19 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
                     command: SessionCommand,
                     args: android.os.Bundle
                 ): ListenableFuture<SessionResult> {
-                    if (command.customAction == "PLAYBACK_UPDATE") {
-                        _currentSentence.value = args.getString("sentence", "")
-                        _currentPageIndex.value = args.getInt("pageIndex", 0)
-                        _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
-                        _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
-                        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                    when (command.customAction) {
+                        "PLAYBACK_UPDATE" -> {
+                            _currentSentence.value = args.getString("sentence", "")
+                            _currentPageIndex.value = args.getInt("pageIndex", 0)
+                            _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
+                            _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
+                        "LOADING_STATE" -> {
+                            val isLoading = args.getBoolean("isLoading", false)
+                            _appState.value = if (isLoading) AppState.ParsingPdf else AppState.Ready
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
                 }
@@ -148,6 +155,19 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
                 )
             } else {
                 _appState.value = AppState.Ready
+            }
+        }
+    }
+
+    fun addBookmark() {
+        viewModelScope.launch {
+            _currentBook.value?.let { book ->
+                repository.insertBookmark(com.musx.a1.data.entity.Bookmark(
+                    bookId = book.id,
+                    chapterIndex = _currentPageIndex.value,
+                    sentenceIndex = _currentSentenceIndex.value,
+                    snippet = _currentSentence.value
+                ))
             }
         }
     }
