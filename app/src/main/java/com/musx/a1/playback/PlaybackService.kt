@@ -171,12 +171,14 @@ class PlaybackService : MediaSessionService() {
 
     private fun loadAndPlayCurrentPage() {
         val path = currentFilePath ?: return
+        broadcastLoading(true)
         serviceScope.launch(Dispatchers.IO) {
             try {
                 val text = pdfParser.extractTextFromPage(path, currentPageIndex)
                 if (text != null && text.isNotBlank()) {
                     currentInstructions = narrationEngine.process(text)
                     withContext(Dispatchers.Main) {
+                        broadcastLoading(false)
                         playCurrentInstruction()
                     }
                 } else {
@@ -187,6 +189,7 @@ class PlaybackService : MediaSessionService() {
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
+                    broadcastLoading(false)
                     // Log error or notify UI
                     broadcastError("Failed to extract text from page $currentPageIndex")
                 }
@@ -316,6 +319,16 @@ class PlaybackService : MediaSessionService() {
         }
         mediaSession?.broadcastCustomCommand(
             SessionCommand("PLAYBACK_ERROR", Bundle.EMPTY),
+            args
+        )
+    }
+
+    private fun broadcastLoading(isLoading: Boolean) {
+        val args = Bundle().apply {
+            putBoolean("isLoading", isLoading)
+        }
+        mediaSession?.broadcastCustomCommand(
+            SessionCommand("LOADING_STATE", Bundle.EMPTY),
             args
         )
     }

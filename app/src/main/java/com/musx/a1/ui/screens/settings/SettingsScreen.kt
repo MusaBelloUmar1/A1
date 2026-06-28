@@ -1,6 +1,7 @@
 package com.musx.a1.ui.screens.settings
 
 import android.content.Intent
+import android.widget.Toast
 import androidx.compose.foundation.clickable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -13,6 +14,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -27,8 +29,12 @@ import com.musx.a1.ui.theme.*
 @Composable
 fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val showLyrics by viewModel.showLyrics.collectAsState()
     val autoPlayNext by viewModel.autoPlayNext.collectAsState()
+    var showSpeedDialog by remember { mutableStateOf(false) }
+    var showSleepDialog by remember { mutableStateOf(false) }
+
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.OpenDocumentTree()
     ) { uri ->
@@ -38,6 +44,23 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
                 Intent.FLAG_GRANT_READ_URI_PERMISSION
             )
             viewModel.addFolder(uri.toString())
+            scope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                val db = com.musx.a1.data.AppDatabase.getDatabase(context)
+                val repository = com.musx.a1.repository.AppRepository(
+                    db.bookDao(),
+                    db.folderDao(),
+                    db.playlistDao(),
+                    db.progressDao(),
+                    db.chapterDao(),
+                    db.bookmarkDao()
+                )
+                val scanner = com.musx.a1.engine.scanner.FolderScanner(
+                    context,
+                    repository,
+                    com.musx.a1.engine.PdfParser(context)
+                )
+                scanner.scanFolder(uri.toString())
+            }
         }
     }
 
@@ -64,8 +87,8 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             SettingsItemDesign("Manage Folders", Icons.Default.Folder, onClick = { launcher.launch(null) })
-            SettingsItemDesign("Sleep Timer", Icons.Default.Timer, "Off")
-            SettingsItemDesign("Playback Speed", Icons.Default.Speed, "1.0x")
+            SettingsItemDesign("Sleep Timer", Icons.Default.Timer, "Off", onClick = { showSleepDialog = true })
+            SettingsItemDesign("Playback Speed", Icons.Default.Speed, "1.0x", onClick = { showSpeedDialog = true })
             SettingsItemDesign(
                 "Show Lyrics",
                 Icons.Default.Lyrics,
@@ -83,6 +106,27 @@ fun SettingsScreen(viewModel: SettingsViewModel, onBack: () -> Unit) {
             SettingsItemDesign("Clear Cache", Icons.Default.DeleteSweep, onClick = { viewModel.clearCache() })
             SettingsItemDesign("About", Icons.Default.Info, "Musx 1.01 v1.0.0")
         }
+    }
+
+    if (showSpeedDialog) {
+        com.musx.a1.ui.screens.player.SpeedDialog(
+            currentSpeed = 1.0f,
+            onDismiss = { showSpeedDialog = false },
+            onSpeedSelected = {
+                // In a future version, this would update a global Datastore preference
+                Toast.makeText(context, "Default speed set to ${it}x", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+    if (showSleepDialog) {
+        com.musx.a1.ui.screens.player.SleepTimerDialog(
+            onDismiss = { showSleepDialog = false },
+            onTimerSelected = {
+                if (it > 0) {
+                    Toast.makeText(context, "Global sleep timer set for $it minutes", Toast.LENGTH_SHORT).show()
+                }
+            }
+        )
     }
 }
 

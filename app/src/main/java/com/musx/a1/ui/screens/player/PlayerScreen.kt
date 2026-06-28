@@ -12,6 +12,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import android.content.Intent
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -32,6 +33,7 @@ import com.musx.a1.ui.theme.*
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val book by viewModel.currentBook.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
     val sentence by viewModel.currentSentence.collectAsState()
@@ -44,6 +46,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     var selectedTab by remember { mutableStateOf(1) } // 0: Chapters, 1: Now Playing, 2: Transcript
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepDialog by remember { mutableStateOf(false) }
+    var showMoreMenu by remember { mutableStateOf(false) }
 
     val gradientBackground = Brush.verticalGradient(
         colors = listOf(Color(0xFF647DEE), Color(0xFF7F53AC))
@@ -66,8 +69,39 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                    Box {
+                        IconButton(onClick = { showMoreMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false },
+                            modifier = Modifier.background(BackgroundWhite)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Share PDF", color = PrimaryBlue) },
+                                onClick = {
+                                    showMoreMenu = false
+                                    book?.let {
+                                        val intent = Intent(Intent.ACTION_SEND).apply {
+                                            type = "application/pdf"
+                                            putExtra(Intent.EXTRA_STREAM, android.net.Uri.parse(it.filePath))
+                                        }
+                                        context.startActivity(Intent.createChooser(intent, "Share PDF"))
+                                    }
+                                },
+                                leadingIcon = { Icon(Icons.Default.Share, contentDescription = null, tint = PrimaryBlue) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Add Bookmark", color = PrimaryBlue) },
+                                onClick = {
+                                    showMoreMenu = false
+                                    viewModel.addBookmark()
+                                    Toast.makeText(context, "Bookmark added", Toast.LENGTH_SHORT).show()
+                                },
+                                leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null, tint = PrimaryBlue) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
