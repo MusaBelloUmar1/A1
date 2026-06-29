@@ -14,7 +14,6 @@ import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionResult
 import com.musx.a1.engine.TtsManager
 import com.musx.a1.engine.PdfParser
-import com.musx.a1.engine.QueueEngine
 import com.musx.a1.domain.engine.NarrationEngine
 import com.musx.a1.domain.engine.SpeechInstruction
 import com.musx.a1.data.AppDatabase
@@ -38,6 +37,7 @@ class PlaybackService : MediaSessionService() {
     private var instructionIndex: Int = 0
     private var currentPageIndex: Int = 0
     private var shuffleEnabled = false
+    private var shuffledIndices: List<Int> = emptyList()
     private var repeatMode = 0 // 0: None, 1: One, 2: All
     private var playbackSpeed = 1.0f
 
@@ -105,12 +105,11 @@ class PlaybackService : MediaSessionService() {
                     val providedPage = args.getInt("pageIndex", -1)
                     val providedSentence = args.getInt("sentenceIndex", -1)
 
-                    if (providedPage != -1 && providedSentence != -1) {
-                        currentPageIndex = providedPage
-                        instructionIndex = providedSentence
-                        loadAndPlayCurrentPage()
-                    } else {
-                        serviceScope.launch {
+                    serviceScope.launch {
+                        if (providedPage != -1 && providedSentence != -1) {
+                            currentPageIndex = providedPage
+                            instructionIndex = providedSentence
+                        } else {
                             if (currentBookId != -1L) {
                                 val db = AppDatabase.getDatabase(this@PlaybackService)
                                 val progress = withContext(Dispatchers.IO) {
@@ -122,8 +121,11 @@ class PlaybackService : MediaSessionService() {
                                 currentPageIndex = 0
                                 instructionIndex = 0
                             }
-                            loadAndPlayCurrentPage()
                         }
+                        if (shuffleEnabled) {
+                            generateShuffledIndices()
+                        }
+                        loadAndPlayCurrentPage()
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
@@ -137,6 +139,11 @@ class PlaybackService : MediaSessionService() {
                 }
                 "TOGGLE_SHUFFLE" -> {
                     shuffleEnabled = args.getBoolean("enabled", false)
+                    if (shuffleEnabled) {
+                        serviceScope.launch {
+                            generateShuffledIndices()
+                        }
+                    }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 "SET_REPEAT_MODE" -> {
@@ -194,6 +201,14 @@ class PlaybackService : MediaSessionService() {
         }
     }
 
+    private suspend fun generateShuffledIndices() = withContext(Dispatchers.IO) {
+        val path = currentFilePath ?: return@withContext
+        val totalPages = pdfParser.getPageCount(path)
+        if (totalPages > 0) {
+            shuffledIndices = (0 until totalPages).shuffled()
+        }
+    }
+
     private fun playCurrentInstruction() {
         if (mediaSession?.player?.playWhenReady == false) return
 
@@ -204,29 +219,50 @@ class PlaybackService : MediaSessionService() {
             broadcastUpdate()
         } else {
             // Page finished, check if book finished
-            val totalPages = serviceScope.async(Dispatchers.IO) {
-                currentFilePath?.let { pdfParser.getPageCount(it) } ?: 0
-            }
             serviceScope.launch {
-                val pages = totalPages.await()
-                if (currentPageIndex + 1 < pages) {
-                    currentPageIndex++
-                    instructionIndex = 0
-                    loadAndPlayCurrentPage()
-                } else {
-                    // Book finished
-                    if (repeatMode == 2) { // Repeat All
-                        currentPageIndex = 0
+                val totalPages = withContext(Dispatchers.IO) {
+                    currentFilePath?.let { pdfParser.getPageCount(it) } ?: 0
+                }
+
+                if (shuffleEnabled && shuffledIndices.isNotEmpty()) {
+                    val currentShufflePos = shuffledIndices.indexOf(currentPageIndex)
+                    if (currentShufflePos != -1 && currentShufflePos + 1 < shuffledIndices.size) {
+                        currentPageIndex = shuffledIndices[currentShufflePos + 1]
                         instructionIndex = 0
                         loadAndPlayCurrentPage()
                     } else {
-                        mediaSession?.player?.pause()
-                        currentPageIndex = 0
+                        handleBookFinished()
+                    }
+                } else {
+                    if (currentPageIndex + 1 < totalPages) {
+                        currentPageIndex++
                         instructionIndex = 0
-                        // Optionally broadcast book finished
+                        loadAndPlayCurrentPage()
+                    } else {
+                        handleBookFinished()
                     }
                 }
             }
+        }
+    }
+
+    private suspend fun handleBookFinished() {
+        if (repeatMode == 2) { // Repeat All
+            if (shuffleEnabled) {
+                generateShuffledIndices()
+                currentPageIndex = shuffledIndices.getOrNull(0) ?: 0
+            } else {
+                currentPageIndex = 0
+            }
+            instructionIndex = 0
+            loadAndPlayCurrentPage()
+        } else {
+            withContext(Dispatchers.Main) {
+                mediaSession?.player?.pause()
+            }
+            currentPageIndex = 0
+            instructionIndex = 0
+            // Optionally broadcast book finished
         }
     }
 
@@ -259,9 +295,29 @@ class PlaybackService : MediaSessionService() {
             instructionIndex++
             playCurrentInstruction()
         } else {
-            currentPageIndex++
-            instructionIndex = 0
-            loadAndPlayCurrentPage()
+            serviceScope.launch {
+                val totalPages = withContext(Dispatchers.IO) {
+                    currentFilePath?.let { pdfParser.getPageCount(it) } ?: 0
+                }
+                if (shuffleEnabled && shuffledIndices.isNotEmpty()) {
+                    val currentShufflePos = shuffledIndices.indexOf(currentPageIndex)
+                    if (currentShufflePos != -1 && currentShufflePos + 1 < shuffledIndices.size) {
+                        currentPageIndex = shuffledIndices[currentShufflePos + 1]
+                        instructionIndex = 0
+                        loadAndPlayCurrentPage()
+                    } else {
+                        handleBookFinished()
+                    }
+                } else {
+                    if (currentPageIndex + 1 < totalPages) {
+                        currentPageIndex++
+                        instructionIndex = 0
+                        loadAndPlayCurrentPage()
+                    } else {
+                        handleBookFinished()
+                    }
+                }
+            }
         }
     }
 
