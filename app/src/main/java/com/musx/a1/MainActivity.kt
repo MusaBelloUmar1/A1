@@ -152,6 +152,7 @@ class MainActivity : ComponentActivity() {
                             currentRoute == "onboarding_folder" -> false
                             currentRoute?.startsWith("player") == true -> false
                             currentRoute == "settings" -> false
+                            currentRoute?.startsWith("playlist_detail") == true -> false
                             else -> true
                         }
                         if (showBottomBar) {
@@ -288,6 +289,7 @@ fun AppNavigation(
                 LibraryScreen(
                     viewModel = viewModel,
                     onBack = { navController.popBackStack() },
+                    onSettingsClick = { navController.navigate("settings") },
                     onBookClick = { book ->
                         navController.navigate("player/${book.id}")
                     }
@@ -304,6 +306,7 @@ fun AppNavigation(
                     viewModel = viewModel,
                     initialTab = tabIndex,
                     onBack = { navController.popBackStack() },
+                    onSettingsClick = { navController.navigate("settings") },
                     onBookClick = { book ->
                         navController.navigate("player/${book.id}")
                     }

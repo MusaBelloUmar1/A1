@@ -25,19 +25,26 @@ import com.musx.a1.ui.components.NeumorphicCard
 import com.musx.a1.ui.components.shimmer.ShimmerItem
 import com.musx.a1.ui.theme.*
 
+enum class LibraryTab(val title: String) {
+    Songs("Songs"),
+    Artists("Artists"),
+    Albums("Albums"),
+    Folders("Folders")
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LibraryScreen(
     viewModel: LibraryViewModel,
     initialTab: Int = 0,
     onBack: () -> Unit,
+    onSettingsClick: () -> Unit,
     onBookClick: (Book) -> Unit
 ) {
     val allBooks by viewModel.allBooks.collectAsState()
     val appState by viewModel.appState.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(initialTab) }
-    val tabs = listOf("Songs", "Artists", "Albums", "Folders")
+    var selectedTab by remember { mutableStateOf(LibraryTab.entries[initialTab.coerceIn(0, LibraryTab.entries.size - 1)]) }
 
     Scaffold(
         containerColor = BackgroundWhite,
@@ -66,23 +73,23 @@ fun LibraryScreen(
                 }
 
                 ScrollableTabRow(
-                    selectedTabIndex = selectedTab,
+                    selectedTabIndex = selectedTab.ordinal,
                     containerColor = Color.Transparent,
                     contentColor = PrimaryBlue,
                     edgePadding = 16.dp,
                     divider = {},
                     indicator = { tabPositions ->
                         TabRowDefaults.SecondaryIndicator(
-                            Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                            Modifier.tabIndicatorOffset(tabPositions[selectedTab.ordinal]),
                             color = PrimaryBlue
                         )
                     }
                 ) {
-                    tabs.forEachIndexed { index, title ->
+                    LibraryTab.entries.forEach { tab ->
                         Tab(
-                            selected = selectedTab == index,
-                            onClick = { selectedTab = index },
-                            text = { Text(title, fontSize = 14.sp, fontWeight = if (selectedTab == index) FontWeight.Bold else FontWeight.Normal) }
+                            selected = selectedTab == tab,
+                            onClick = { selectedTab = tab },
+                            text = { Text(tab.title, fontSize = 14.sp, fontWeight = if (selectedTab == tab) FontWeight.Bold else FontWeight.Normal) }
                         )
                     }
                 }
@@ -102,22 +109,48 @@ fun LibraryScreen(
                     title = "No books found",
                     description = "Scan a folder to add your PDF books to the library.",
                     actionText = "Go to Settings",
-                    onAction = {}
+                    onAction = onSettingsClick
                 )
             }
         } else {
-            val filteredBooks = when(selectedTab) {
-                1 -> allBooks.filter { it.favorite } // Simple artist/fav mix for now
-                else -> allBooks
-            }
+            when (selectedTab) {
+                LibraryTab.Folders -> {
+                    val folders = allBooks.groupBy { it.filePath.substringBeforeLast("/") }
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        folders.forEach { (path, books) ->
+                            item {
+                                Text(
+                                    text = path.substringAfterLast("/"),
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                            items(books) { book ->
+                                BookListItem(book = book, onClick = { onBookClick(book) })
+                            }
+                        }
+                    }
+                }
+                else -> {
+                    val filteredBooks = when (selectedTab) {
+                        LibraryTab.Artists -> allBooks.filter { it.favorite } // Artists = Favorites
+                        else -> allBooks
+                    }
 
-            LazyColumn(
-                modifier = Modifier.fillMaxSize().padding(padding),
-                contentPadding = PaddingValues(16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
-            ) {
-                items(filteredBooks) { book ->
-                    BookListItem(book = book, onClick = { onBookClick(book) })
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize().padding(padding),
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        items(filteredBooks) { book ->
+                            BookListItem(book = book, onClick = { onBookClick(book) })
+                        }
+                    }
                 }
             }
         }
