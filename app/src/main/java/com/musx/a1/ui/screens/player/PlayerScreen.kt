@@ -15,6 +15,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import android.content.Intent
 import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -355,10 +356,19 @@ fun NowPlayingContent(
                     tint = if (book?.favorite == true) AccentYellow else Color.White
                 )
             }
-            IconButton(onClick = { Toast.makeText(context, "Download not available in preview", Toast.LENGTH_SHORT).show() }) {
+            IconButton(onClick = { Toast.makeText(context, "Feature coming soon: Local Export", Toast.LENGTH_SHORT).show() }) {
                 Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White)
             }
-            IconButton(onClick = { Toast.makeText(context, "Sharing not available in preview", Toast.LENGTH_SHORT).show() }) {
+            IconButton(onClick = {
+                book?.let {
+                    val intent = Intent(Intent.ACTION_SEND).apply {
+                        type = "text/plain"
+                        putExtra(Intent.EXTRA_SUBJECT, "Listening to: ${it.title}")
+                        putExtra(Intent.EXTRA_TEXT, "I'm listening to ${it.title} on Musx A1!")
+                    }
+                    context.startActivity(Intent.createChooser(intent, "Share Book"))
+                }
+            }) {
                 Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
             }
         }

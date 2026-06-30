@@ -34,12 +34,20 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
                     command: SessionCommand,
                     args: android.os.Bundle
                 ): ListenableFuture<SessionResult> {
-                    if (command.customAction == "PLAYBACK_UPDATE") {
-                        _currentSentence.value = args.getString("sentence", "")
-                        _currentPageIndex.value = args.getInt("pageIndex", 0)
-                        _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
-                        _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
-                        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                    when (command.customAction) {
+                        "PLAYBACK_UPDATE" -> {
+                            _currentSentence.value = args.getString("sentence", "")
+                            _currentPageIndex.value = args.getInt("pageIndex", 0)
+                            _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
+                            _totalSentences.value = args.getInt("totalSentences", 0)
+                            _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
+                        "PLAYBACK_ERROR" -> {
+                            val error = args.getString("error", "Unknown error")
+                            _currentSentence.value = "Error: $error"
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
                 }
@@ -74,6 +82,9 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     private val _pageSentences = MutableStateFlow<List<String>>(emptyList())
     val pageSentences: StateFlow<List<String>> = _pageSentences
+
+    private val _totalSentences = MutableStateFlow(0)
+    val totalSentences: StateFlow<Int> = _totalSentences
 
     private val _currentPageIndex = MutableStateFlow(0)
     val currentPageIndex: StateFlow<Int> = _currentPageIndex
