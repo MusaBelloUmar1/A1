@@ -241,11 +241,13 @@ fun AppNavigation(
         composable("dashboard") {
             val libraryViewModel: LibraryViewModel = viewModel(factory = ViewModelFactory(repository, db))
             val playerViewModel: PlayerViewModel = viewModel(factory = ViewModelFactory(repository, db))
+            val playlistsViewModel: PlaylistsViewModel = viewModel(factory = ViewModelFactory(repository, db))
             val context = androidx.compose.ui.platform.LocalContext.current
             LaunchedEffect(Unit) { playerViewModel.initializeController(context) }
             DashboardScreen(
                 libraryViewModel = libraryViewModel,
                 playerViewModel = playerViewModel,
+                playlistsViewModel = playlistsViewModel,
                 onSettingsClick = { navController.navigate("settings") },
                 onLibraryClick = { navController.navigate("library") },
                 onPlayerClick = { navController.navigate("player") },

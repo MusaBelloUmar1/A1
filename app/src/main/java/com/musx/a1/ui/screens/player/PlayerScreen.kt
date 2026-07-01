@@ -15,7 +15,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import android.content.Intent
+import android.net.Uri
 import android.widget.Toast
+import androidx.core.content.FileProvider
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -355,10 +358,31 @@ fun NowPlayingContent(
                     tint = if (book?.favorite == true) AccentYellow else Color.White
                 )
             }
-            IconButton(onClick = { Toast.makeText(context, "Download not available in preview", Toast.LENGTH_SHORT).show() }) {
+            IconButton(onClick = { Toast.makeText(context, "Offline download not required", Toast.LENGTH_SHORT).show() }) {
                 Icon(Icons.Default.Download, contentDescription = "Download", tint = Color.White)
             }
-            IconButton(onClick = { Toast.makeText(context, "Sharing not available in preview", Toast.LENGTH_SHORT).show() }) {
+            IconButton(onClick = {
+                book?.let {
+                    try {
+                        val fileUri = Uri.parse(it.filePath)
+                        val contentUri = if (fileUri.scheme == "file") {
+                            val file = java.io.File(fileUri.path ?: "")
+                            FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+                        } else {
+                            fileUri
+                        }
+
+                        val intent = Intent(Intent.ACTION_SEND).apply {
+                            type = "application/pdf"
+                            putExtra(Intent.EXTRA_STREAM, contentUri)
+                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                        }
+                        context.startActivity(Intent.createChooser(intent, "Share PDF"))
+                    } catch (e: Exception) {
+                        Toast.makeText(context, "Failed to share: ${e.message}", Toast.LENGTH_SHORT).show()
+                    }
+                }
+            }) {
                 Icon(Icons.Default.Share, contentDescription = "Share", tint = Color.White)
             }
         }
