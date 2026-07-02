@@ -39,9 +39,11 @@ fun DashboardScreen(
     onPlayerClick: () -> Unit,
     onPlaylistsClick: () -> Unit,
     onFavoritesClick: () -> Unit,
-    onRecentsClick: () -> Unit
+    onRecentsClick: () -> Unit,
+    playlistsViewModel: com.musx.a1.ui.screens.playlists.PlaylistsViewModel
 ) {
     val allBooks by libraryViewModel.allBooks.collectAsState()
+    val playlists by playlistsViewModel.playlists.collectAsState()
     val currentBook by playerViewModel.currentBook.collectAsState()
     val isPlaying by playerViewModel.isPlaying.collectAsState()
 
@@ -116,7 +118,7 @@ fun DashboardScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Box(modifier = Modifier.weight(1f)) {
-                        DashboardActionCard("Playlists", "0 playlists", Icons.AutoMirrored.Filled.QueueMusic, onPlaylistsClick)
+                        DashboardActionCard("Playlists", "${playlists.size} playlists", Icons.AutoMirrored.Filled.QueueMusic, onPlaylistsClick)
                     }
                     Box(modifier = Modifier.weight(1f)) {
                         val recentCount = allBooks.count { it.lastOpenedAt > 0 }

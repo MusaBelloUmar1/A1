@@ -34,12 +34,20 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
                     command: SessionCommand,
                     args: android.os.Bundle
                 ): ListenableFuture<SessionResult> {
-                    if (command.customAction == "PLAYBACK_UPDATE") {
-                        _currentSentence.value = args.getString("sentence", "")
-                        _currentPageIndex.value = args.getInt("pageIndex", 0)
-                        _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
-                        _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
-                        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                    when (command.customAction) {
+                        "PLAYBACK_UPDATE" -> {
+                            _currentSentence.value = args.getString("sentence", "")
+                            _currentPageIndex.value = args.getInt("pageIndex", 0)
+                            _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
+                            _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
+                            _appState.value = AppState.Ready
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
+                        "PLAYBACK_ERROR" -> {
+                            val error = args.getString("error", "Unknown playback error")
+                            _appState.value = AppState.Error(error)
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
                 }
@@ -155,6 +163,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     fun loadExternalUri(uri: String) {
         viewModelScope.launch {
             _appState.value = AppState.ParsingPdf
+            _currentBook.value = null // Clear previous book
             // Create a temporary book object for UI
             _currentBook.value = Book(
                 id = -1L,
@@ -191,6 +200,8 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun seekTo(position: Float) {
         val book = _currentBook.value ?: return
+        if (book.totalPages <= 0) return
+        _appState.value = AppState.ParsingPdf
         val pageToSeek = (position * book.totalPages).toInt().coerceIn(0, book.totalPages - 1)
         val args = android.os.Bundle().apply {
             putString("filePath", book.filePath)
@@ -233,6 +244,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
     fun playChapter(chapter: Chapter) {
         val book = _currentBook.value ?: return
+        _appState.value = AppState.ParsingPdf
         val args = android.os.Bundle().apply {
             putString("filePath", book.filePath)
             putInt("pageIndex", chapter.startPage)
@@ -247,6 +259,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     }
 
     fun skipNext() {
+        _appState.value = AppState.ParsingPdf
         mediaController?.sendCustomCommand(
             SessionCommand("SKIP_NEXT", android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY
@@ -254,6 +267,7 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     }
 
     fun skipPrevious() {
+        _appState.value = AppState.ParsingPdf
         mediaController?.sendCustomCommand(
             SessionCommand("SKIP_PREVIOUS", android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY
