@@ -42,6 +42,7 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
     val sleepTimer by viewModel.sleepTimerMillis.collectAsState()
 
     var selectedTab by remember { mutableStateOf(1) } // 0: Chapters, 1: Now Playing, 2: Transcript
+    var showMoreMenu by remember { mutableStateOf(false) }
     var showSpeedDialog by remember { mutableStateOf(false) }
     var showSleepDialog by remember { mutableStateOf(false) }
 
@@ -66,8 +67,24 @@ fun PlayerScreen(viewModel: PlayerViewModel, onBack: () -> Unit) {
                     }
                 },
                 actions = {
-                    IconButton(onClick = {}) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                    Box {
+                        IconButton(onClick = { showMoreMenu = true }) {
+                            Icon(Icons.Default.MoreVert, contentDescription = "More", tint = Color.White)
+                        }
+                        DropdownMenu(
+                            expanded = showMoreMenu,
+                            onDismissRequest = { showMoreMenu = false },
+                            modifier = Modifier.background(BackgroundWhite)
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Add Bookmark", color = PrimaryBlue) },
+                                onClick = {
+                                    viewModel.addBookmark()
+                                    showMoreMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Default.Bookmark, contentDescription = null, tint = PrimaryBlue) }
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = Color.Transparent)
