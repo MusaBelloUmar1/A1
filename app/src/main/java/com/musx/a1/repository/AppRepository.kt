@@ -12,8 +12,11 @@ import com.musx.a1.data.dao.PlaylistDao
 import com.musx.a1.data.dao.ProgressDao
 import com.musx.a1.data.entity.Playlist
 import com.musx.a1.data.entity.PlaylistBookCrossRef
+import com.musx.a1.data.dao.BookmarkDao
+import com.musx.a1.data.entity.Bookmark
 
 class AppRepository(
+    private val bookmarkDao: BookmarkDao,
     private val bookDao: BookDao,
     private val folderDao: FolderDao,
     private val playlistDao: PlaylistDao,
@@ -47,4 +50,9 @@ class AppRepository(
     // Chapters
     fun getChaptersForBook(bookId: Long): Flow<List<Chapter>> = chapterDao.getChaptersForBook(bookId)
     suspend fun insertChapters(chapters: List<Chapter>) = chapterDao.insertChapters(chapters)
+
+    // Bookmarks
+    fun getBookmarksForBook(bookId: Long) = bookmarkDao.getBookmarksForBook(bookId)
+    suspend fun insertBookmark(bookmark: Bookmark) = bookmarkDao.insertBookmark(bookmark)
+    suspend fun deleteBookmark(bookmark: Bookmark) = bookmarkDao.deleteBookmark(bookmark)
 }

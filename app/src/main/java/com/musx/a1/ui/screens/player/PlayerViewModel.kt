@@ -34,12 +34,19 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
                     command: SessionCommand,
                     args: android.os.Bundle
                 ): ListenableFuture<SessionResult> {
-                    if (command.customAction == "PLAYBACK_UPDATE") {
-                        _currentSentence.value = args.getString("sentence", "")
-                        _currentPageIndex.value = args.getInt("pageIndex", 0)
-                        _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
-                        _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
-                        return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                    when (command.customAction) {
+                        "PLAYBACK_UPDATE" -> {
+                            _currentSentence.value = args.getString("sentence", "")
+                            _currentPageIndex.value = args.getInt("pageIndex", 0)
+                            _currentSentenceIndex.value = args.getInt("sentenceIndex", 0)
+                            _pageSentences.value = args.getStringArrayList("pageSentences") ?: emptyList()
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
+                        "PLAYBACK_ERROR" -> {
+                            val errorMessage = args.getString("error", "Unknown playback error")
+                            _appState.value = AppState.Error(errorMessage)
+                            return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                        }
                     }
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_ERROR_NOT_SUPPORTED))
                 }
@@ -141,6 +148,9 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
 
                 _appState.value = AppState.Ready
 
+                // Update last opened metadata
+                repository.updateBook(book.copy(lastOpenedAt = System.currentTimeMillis()))
+
                 val args = android.os.Bundle().apply { putLong("bookId", bookId) }
                 mediaController?.sendCustomCommand(
                     SessionCommand("SET_BOOK_ID", android.os.Bundle.EMPTY),
@@ -149,6 +159,23 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
             } else {
                 _appState.value = AppState.Ready
             }
+        }
+    }
+
+    fun addBookmark() {
+        val book = _currentBook.value ?: return
+        val sentence = _currentSentence.value
+        if (sentence.isBlank()) return
+
+        viewModelScope.launch {
+            repository.insertBookmark(
+                com.musx.a1.data.entity.Bookmark(
+                    bookId = book.id,
+                    chapterIndex = _currentPageIndex.value,
+                    sentenceIndex = _currentSentenceIndex.value,
+                    snippet = sentence
+                )
+            )
         }
     }
 
@@ -247,17 +274,33 @@ class PlayerViewModel(private val repository: AppRepository) : ViewModel() {
     }
 
     fun skipNext() {
+        _appState.value = AppState.ParsingPdf
         mediaController?.sendCustomCommand(
             SessionCommand("SKIP_NEXT", android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY
         )
+        // Note: AppState will be set back to Ready (via UI or next update)
+        // In a real app, we'd wait for the command result or the next update.
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(500)
+            if (_appState.value is AppState.ParsingPdf) {
+                _appState.value = AppState.Ready
+            }
+        }
     }
 
     fun skipPrevious() {
+        _appState.value = AppState.ParsingPdf
         mediaController?.sendCustomCommand(
             SessionCommand("SKIP_PREVIOUS", android.os.Bundle.EMPTY),
             android.os.Bundle.EMPTY
         )
+        viewModelScope.launch {
+            kotlinx.coroutines.delay(500)
+            if (_appState.value is AppState.ParsingPdf) {
+                _appState.value = AppState.Ready
+            }
+        }
     }
 
     override fun onCleared() {

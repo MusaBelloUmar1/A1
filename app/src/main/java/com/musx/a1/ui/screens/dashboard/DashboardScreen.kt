@@ -29,11 +29,14 @@ import com.musx.a1.ui.screens.library.LibraryViewModel
 import com.musx.a1.ui.screens.player.PlayerViewModel
 import com.musx.a1.ui.theme.*
 
+import com.musx.a1.ui.screens.playlists.PlaylistsViewModel
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     libraryViewModel: LibraryViewModel,
     playerViewModel: PlayerViewModel,
+    playlistsViewModel: PlaylistsViewModel,
     onSettingsClick: () -> Unit,
     onLibraryClick: () -> Unit,
     onPlayerClick: () -> Unit,
@@ -42,6 +45,7 @@ fun DashboardScreen(
     onRecentsClick: () -> Unit
 ) {
     val allBooks by libraryViewModel.allBooks.collectAsState()
+    val playlists by playlistsViewModel.playlists.collectAsState()
     val currentBook by playerViewModel.currentBook.collectAsState()
     val isPlaying by playerViewModel.isPlaying.collectAsState()
 
@@ -116,7 +120,7 @@ fun DashboardScreen(
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
                     Box(modifier = Modifier.weight(1f)) {
-                        DashboardActionCard("Playlists", "0 playlists", Icons.AutoMirrored.Filled.QueueMusic, onPlaylistsClick)
+                        DashboardActionCard("Playlists", "${playlists.size} playlists", Icons.AutoMirrored.Filled.QueueMusic, onPlaylistsClick)
                     }
                     Box(modifier = Modifier.weight(1f)) {
                         val recentCount = allBooks.count { it.lastOpenedAt > 0 }
